@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>베이블루 할리갈리 온라인</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">BB</span>
+          <span>베이블루 할리갈리 온라인</span>
+        </div>
+        <button id="settingsButton" class="icon-button" type="button" title="설정">⚙</button>
+        <section id="settingsPanel" class="settings-panel hidden" aria-label="설정 패널">
+          <label class="volume-row">
+            <span>BGM</span>
+            <input id="volumeSlider" type="range" min="0" max="10" step="1" />
+            <strong id="volumeValue">5</strong>
+          </label>
+          <button id="nicknameChangeButton" class="secondary-button" type="button">닉네임 변경</button>
+          <button id="leaveButton" class="secondary-button" type="button">나가기</button>
+        </section>
+      </header>
+
+      <main>
+        <section id="nicknameScreen" class="screen nickname-screen">
+          <form id="nicknameForm" class="entry-panel">
+            <div class="tiny-deco">✦ ♡ ✿</div>
+            <h1>닉네임 입력</h1>
+            <p id="nicknameError" class="error-text"></p>
+            <input id="nicknameInput" class="glow-input" type="text" maxlength="6" autocomplete="off" />
+            <p class="input-help">6자내 한글,영어 포함</p>
+            <button class="primary-button" type="submit">대기실 입장</button>
+          </form>
+        </section>
+
+        <section id="lobbyScreen" class="screen hidden">
+          <div class="lobby-grid">
+            <section class="panel guide-panel">
+              <h2>게임 설명</h2>
+              <div class="guide-list">
+                <article class="guide-item">
+                  <span class="guide-icon">🎮</span>
+                  <div>
+                    <strong>게임 인원</strong>
+                    <span>1~6인 플레이 가능</span>
+                    <span>AI 추가 가능</span>
+                    <small>(총 2명 이상부터 시작)</small>
+                  </div>
+                </article>
+                <article class="guide-item">
+                  <span class="guide-icon">⭐</span>
+                  <div>
+                    <strong>점수제 방식</strong>
+                    <span>카드 수가 아니라 점수로 승부합니다</span>
+                  </div>
+                </article>
+                <article class="guide-item">
+                  <span class="guide-icon">🃏</span>
+                  <div>
+                    <strong>카드 넘기기</strong>
+                    <span>카드 덱을 마우스 왼쪽 클릭</span>
+                  </div>
+                </article>
+                <article class="guide-item">
+                  <span class="guide-icon">🔔</span>
+                  <div>
+                    <strong>종 치기</strong>
+                    <span>전체 테이블에서 같은 캐릭터가 5개가 되면</span>
+                    <span>스페이스바로 종을 치세요</span>
+                  </div>
+                </article>
+                <article class="guide-item">
+                  <span class="guide-icon">🔥</span>
+                  <div>
+                    <strong>게임 모드</strong>
+                    <span>일반 모드 → 한 카드에 한 캐릭터</span>
+                    <span>하드 모드 → 한 카드에 여러 캐릭터 등장</span>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="panel room-list-panel">
+              <div class="section-title-row">
+                <h2>게임방 목록</h2>
+                <span id="onlineCount" class="pill">0명 접속</span>
+              </div>
+              <div id="roomList" class="room-list"></div>
+            </section>
+
+            <aside class="lobby-side">
+              <section class="panel compact-panel">
+                <h2>내 전적</h2>
+                <div id="myStats" class="stats-grid"></div>
+                <button id="openCreateRoomButton" class="primary-button create-room-trigger" type="button">방 만들기</button>
+              </section>
+
+              <section class="panel ranking-panel">
+                <h2>서버 최다승 TOP3</h2>
+                <ol id="topWinsList" class="top-list"></ol>
+                <h2>서버 최고승률 TOP3</h2>
+                <ol id="topWinRatesList" class="top-list"></ol>
+              </section>
+
+              <section id="onlineUsersPanel" class="panel online-users-panel">
+                <div class="section-title-row">
+                  <button id="onlineUsersToggleButton" class="panel-toggle-button" type="button">현재 접속 유저 ▼</button>
+                  <button id="refreshUsersButton" class="mini-button" type="button">새로고침</button>
+                </div>
+                <div id="onlineUsersList" class="online-users-list"></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="roomScreen" class="screen hidden">
+          <div class="room-layout">
+            <section class="panel">
+              <div class="section-title-row">
+                <h2 id="roomTitle">방</h2>
+                <span id="roomCount" class="pill"></span>
+              </div>
+              <div id="roomPlayers" class="waiting-players"></div>
+            </section>
+            <aside class="panel room-actions">
+              <h2>준비</h2>
+              <button id="readyButton" class="primary-button" type="button">준비</button>
+              <button id="addAIButton" class="secondary-button" type="button">AI 추가</button>
+              <button id="removeAIButton" class="secondary-button" type="button">AI 제거</button>
+              <button id="startGameButton" class="primary-button" type="button">게임 시작</button>
+              <button id="roomLeaveButton" class="ghost-button" type="button">나가기</button>
+              <p id="roomHint" class="hint-text"></p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="gameScreen" class="screen hidden game-screen">
+          <div class="game-board">
+            <div class="game-hud">
+              <span id="gameModeBadge" class="badge mode-badge">[일반]</span>
+              <span id="gameTurnLimitBadge" class="badge turn-limit-badge">턴 제한: 6초</span>
+              <strong id="turnTimer" class="turn-timer">6.0</strong>
+              <span id="gamePenaltyBadge" class="badge penalty-badge">[1배]</span>
+            </div>
+            <div id="gamePlayers" class="game-players"></div>
+            <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">
+              <img id="bellImage" src="/assets/bell/bell.png?v=2" alt="" aria-hidden="true" />
+              <span class="bell-fallback">종</span>
+            </button>
+            <div id="resultOverlay" class="result-overlay hidden"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="createRoomModal" class="modal-backdrop hidden">
+      <form id="createRoomForm" class="modal-card create-room-modal-card">
+        <button id="closeCreateRoomModalButton" class="modal-close-button" type="button" aria-label="닫기">×</button>
+        <h2>방 만들기</h2>
+        <label>
+          <span>방 제목</span>
+          <input id="roomTitleInput" type="text" maxlength="10" autocomplete="off" required />
+        </label>
+        <label class="checkbox-row">
+          <input id="privateRoomCheck" type="checkbox" />
+          <span>비밀번호방</span>
+        </label>
+        <label id="passwordCreateRow" class="hidden">
+          <span>비밀번호</span>
+          <input id="roomPasswordInput" type="text" inputmode="numeric" maxlength="6" />
+          <small>숫자 1~6자리 입력</small>
+        </label>
+        <label>
+          <span>최대 인원</span>
+          <select id="maxPlayersSelect">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6" selected>6</option>
+          </select>
+        </label>
+        <label>
+          <span>AI 수</span>
+          <select id="aiCountSelect">
+            <option value="0" selected>0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
+        <fieldset class="mode-field">
+          <legend>게임 모드</legend>
+          <label class="radio-row">
+            <input type="radio" name="gameMode" value="normal" checked />
+            <span>일반 모드</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="gameMode" value="hard" />
+            <span>하드 모드</span>
+          </label>
+        </fieldset>
+        <fieldset class="mode-field">
+          <legend>감점 배수</legend>
+          <label class="radio-row">
+            <input type="radio" name="penaltyMultiplier" value="1" checked />
+            <span>1배</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="penaltyMultiplier" value="2" />
+            <span>2배</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="penaltyMultiplier" value="3" />
+            <span>3배</span>
+          </label>
+        </fieldset>
+        <fieldset class="mode-field turn-time-field">
+          <legend>턴 시간</legend>
+          <label class="radio-row">
+            <input type="radio" name="turnTime" value="6" checked />
+            <span>6초</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="turnTime" value="8" />
+            <span>8초</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="turnTime" value="10" />
+            <span>10초</span>
+          </label>
+        </fieldset>
+        <button class="primary-button" type="submit">방 생성</button>
+        <p id="createError" class="error-text"></p>
+      </form>
+    </div>
+
+    <div id="passwordModal" class="modal-backdrop hidden">
+      <form id="passwordForm" class="modal-card">
+        <h2>비밀번호 입력</h2>
+        <p id="passwordError" class="error-text"></p>
+        <input id="passwordJoinInput" type="text" inputmode="numeric" maxlength="6" autocomplete="off" />
+        <small>숫자 1~6자리 입력</small>
+        <div class="modal-actions">
+          <button class="secondary-button" id="cancelPasswordButton" type="button">취소</button>
+          <button class="primary-button" type="submit">입장</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="nicknameChangeModal" class="modal-backdrop hidden">
+      <form id="nicknameChangeForm" class="modal-card">
+        <h2>닉네임 변경</h2>
+        <p id="nicknameChangeError" class="error-text"></p>
+        <input id="nicknameChangeInput" type="text" maxlength="6" autocomplete="off" />
+        <small>하루 1회 변경 가능합니다.</small>
+        <div class="modal-actions">
+          <button class="secondary-button" id="cancelNicknameChangeButton" type="button">취소</button>
+          <button class="primary-button" type="submit">변경</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="userContextMenu" class="context-menu hidden"></div>
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/client.js"></script>
+  </body>
+</html>

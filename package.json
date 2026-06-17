@@ -1,0 +1,20 @@
+{
+  "name": "babyblue-halligalli-online",
+  "version": "1.0.0",
+  "description": "Node.js + Express + Socket.IO based Halli Galli style multiplayer web game with JSON file stats.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=24.16.0"
+  }
+}
