@@ -59,50 +59,53 @@
         <section id="lobbyScreen" class="screen hidden">
           <div class="lobby-grid">
             <section class="panel guide-panel">
-              <h2>게임 설명</h2>
-              <div class="guide-list">
-                <article class="guide-item">
-                  <span class="guide-icon">🎮</span>
-                  <div>
-                    <strong>게임 인원</strong>
-                    <span>1~6인 플레이 가능</span>
-                    <span>AI 추가 가능</span>
-                    <small>총 2명 이상부터 시작</small>
-                  </div>
-                </article>
-                <article class="guide-item">
-                  <span class="guide-icon">⭐</span>
-                  <div>
-                    <strong>점수제 방식</strong>
-                    <span>카드 수가 아니라</span>
-                    <span>점수로 승부합니다</span>
-                  </div>
-                </article>
-                <article class="guide-item">
-                  <span class="guide-icon">🃏</span>
-                  <div>
-                    <strong>카드 넘기기</strong>
-                    <span>카드 덱을</span>
-                    <span>마우스 왼쪽 클릭</span>
-                  </div>
-                </article>
-                <article class="guide-item">
-                  <span class="guide-icon">🔔</span>
-                  <div>
-                    <strong>종 치기</strong>
-                    <span>전체 테이블에서</span>
-                    <span>같은 캐릭터가 5개가 되면</span>
-                    <span>스페이스바로 종을 치세요</span>
-                  </div>
-                </article>
-                <article class="guide-item">
-                  <span class="guide-icon">🔥</span>
-                  <div>
-                    <strong>게임 모드</strong>
-                    <span>일반 모드: 한 카드에 한 캐릭터</span>
-                    <span>하드 모드: 한 카드에 여러 캐릭터</span>
-                  </div>
-                </article>
+              <button id="guideToggleButton" class="guide-title-toggle" type="button" aria-expanded="true">게임 설명 ▲</button>
+              <div id="guideBody" class="guide-body">
+                <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼</button>
+                <div class="guide-list">
+                  <article class="guide-item">
+                    <span class="guide-icon">🎮</span>
+                    <div>
+                      <strong>게임 인원</strong>
+                      <span>1~6인 플레이 가능</span>
+                      <span>AI 추가 가능</span>
+                      <small>총 2명 이상부터 시작</small>
+                    </div>
+                  </article>
+                  <article class="guide-item">
+                    <span class="guide-icon">⭐</span>
+                    <div>
+                      <strong>점수제 방식</strong>
+                      <span>카드 수가 아니라</span>
+                      <span>점수로 승부합니다</span>
+                    </div>
+                  </article>
+                  <article class="guide-item">
+                    <span class="guide-icon">🃏</span>
+                    <div>
+                      <strong>카드 넘기기</strong>
+                      <span>카드 덱을</span>
+                      <span>마우스 왼쪽 클릭</span>
+                    </div>
+                  </article>
+                  <article class="guide-item">
+                    <span class="guide-icon">🔔</span>
+                    <div>
+                      <strong>종 치기</strong>
+                      <span>전체 테이블에서</span>
+                      <span>같은 캐릭터가 5개가 되면</span>
+                      <span>스페이스바로 종을 치세요</span>
+                    </div>
+                  </article>
+                  <article class="guide-item">
+                    <span class="guide-icon">🔥</span>
+                    <div>
+                      <strong>게임 모드</strong>
+                      <span>일반 모드: 한 카드에 한 캐릭터</span>
+                      <span>하드 모드: 한 카드에 여러 캐릭터</span>
+                    </div>
+                  </article>
+                </div>
               </div>
             </section>
 
@@ -320,6 +323,17 @@
     </div>
 
     <div id="userContextMenu" class="context-menu hidden"></div>
+    <div id="tutorialOverlay" class="tutorial-overlay hidden" aria-live="polite">
+      <div class="tutorial-card">
+        <strong id="tutorialStepLabel" class="tutorial-step-label"></strong>
+        <p id="tutorialText"></p>
+        <p id="tutorialControlHint" class="tutorial-control-hint"></p>
+        <div class="tutorial-actions">
+          <button id="tutorialNextButton" class="primary-button" type="button">다음</button>
+          <button id="tutorialCompleteButton" class="secondary-button" type="button">튜토리얼 완료</button>
+        </div>
+      </div>
+    </div>
     <div id="toast" class="toast hidden"></div>
 
     <script src="/socket.io/socket.io.js"></script>

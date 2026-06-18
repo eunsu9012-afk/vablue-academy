@@ -17,6 +17,7 @@ const BELL_IMAGE_VERSION = "2";
 const BELL_IMAGE_URL = `${BELL_IMAGE_ASSET}?v=${BELL_IMAGE_VERSION}`;
 const HIDDEN_USERS_KEY = "babyblue-hidden-users";
 const BGM_MODE_KEY = "bgmMode";
+const LOBBY_GUIDE_COLLAPSED_KEY = "lobbyGuideCollapsed";
 
 const CARD_SLOTS = {
   1: { left: "22%", top: "22%" },
@@ -44,6 +45,7 @@ const AI_DIFFICULTY_LABELS = {
   beginner: "초급",
   intermediate: "중급",
   advanced: "고급",
+  tutorial: "튜토리얼",
 };
 const STATUS_ICONS = {
   lobby: "🔵",
@@ -72,6 +74,13 @@ const state = {
   mobileInfoRoomId: null,
   spectatorOverlayDismissedFor: null,
   latency: { value: null, state: "measuring" },
+  tutorial: {
+    active: false,
+    stepIndex: 0,
+    preparedStep: null,
+    waitingFor: null,
+    seenCardId: null,
+  },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -84,6 +93,72 @@ let latencyTimer = null;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
+
+const TUTORIAL_STEPS = [
+  {
+    key: "menu",
+    label: "1 / 8",
+    target: "menu",
+    text: "우측 상단 메뉴에서\nBGM, 효과음, 설정을 변경할 수 있습니다.",
+    nextText: "다음",
+  },
+  {
+    key: "score",
+    label: "2 / 8",
+    target: "score",
+    text: "점수가 0 이하가 되면 탈락합니다.",
+    nextText: "다음",
+  },
+  {
+    key: "deck",
+    label: "3 / 8",
+    target: "deck",
+    text: () => `자신의 차례가 되면\n카드를 공개합니다.\n\n${isMobileMode() ? "게임 화면을 터치하세요." : "카드덱을 클릭하세요."}`,
+    waitingFor: "flip",
+  },
+  {
+    key: "openCard",
+    label: "4 / 8",
+    target: "openCard",
+    text: "공개된 카드는\n모든 플레이어가 함께 보는 카드입니다.",
+    nextText: "다음",
+  },
+  {
+    key: "bell",
+    label: "5 / 8",
+    target: "bell",
+    text: "전체 공개 카드에서\n같은 캐릭터가 정확히 5개가 되면\n종을 칩니다.",
+    waitingFor: "correctBell",
+  },
+  {
+    key: "wrong",
+    label: "6 / 8",
+    target: "bell",
+    text: "5개가 아닌데 종을 치면 감점됩니다.",
+    waitingFor: "wrongBell",
+  },
+  {
+    key: "timer",
+    label: "7 / 8",
+    target: "timer",
+    text: "제한시간 안에 행동해야 합니다.",
+    nextText: "다음",
+  },
+  {
+    key: "win",
+    label: "8 / 8",
+    target: "board",
+    text: "마지막까지 살아남은 플레이어가 승리합니다.",
+    nextText: "실전 체험",
+  },
+  {
+    key: "practice",
+    label: "실전",
+    target: "board",
+    text: "튜토리얼 AI와 짧게 실전 체험을 해보세요.",
+    practice: true,
+  },
+];
 
 function showScreen(name) {
   Object.entries(screens).forEach(([screenName, element]) => {
@@ -170,9 +245,15 @@ function isFlipAvailable(game = state.game) {
 function updateMobileTouchHint(game = state.game) {
   const hint = $("#mobileTouchHint");
   if (!hint) return;
-  if (!isMobileMode() || state.activeScreen !== "game" || !game || game.resultVisible) {
+  if (!game?.isTutorial || !isMobileMode() || state.activeScreen !== "game" || game.resultVisible) {
     hint.classList.add("hidden");
     hint.textContent = "";
+    return;
+  }
+  const tutorialStep = getTutorialStep();
+  if (tutorialStep?.waitingFor === "correctBell" || tutorialStep?.waitingFor === "wrongBell") {
+    hint.textContent = "화면을 터치해서 종을 치세요";
+    hint.classList.remove("hidden");
     return;
   }
   if (isBellAvailable(game)) {
@@ -480,6 +561,24 @@ function saveHiddenUsers(hiddenUsers) {
   localStorage.setItem(HIDDEN_USERS_KEY, JSON.stringify([...hiddenUsers]));
 }
 
+function isLobbyGuideCollapsed() {
+  return localStorage.getItem(LOBBY_GUIDE_COLLAPSED_KEY) === "true";
+}
+
+function applyLobbyGuideCollapsed(collapsed) {
+  const button = $("#guideToggleButton");
+  const body = $("#guideBody");
+  if (!button || !body) return;
+  body.classList.toggle("hidden", collapsed);
+  button.textContent = collapsed ? "게임 설명 ▼" : "게임 설명 ▲";
+  button.setAttribute("aria-expanded", String(!collapsed));
+  localStorage.setItem(LOBBY_GUIDE_COLLAPSED_KEY, String(collapsed));
+}
+
+function toggleLobbyGuide() {
+  applyLobbyGuideCollapsed(!isLobbyGuideCollapsed());
+}
+
 function hideUser(nickname) {
   const hiddenUsers = getHiddenUsers();
   hiddenUsers.add(nickname);
@@ -660,12 +759,173 @@ function updateOnlineUsersPanelState() {
     : "\ud604\uc7ac \uc811\uc18d \uc720\uc800 \u25bc";
 }
 
+function getTutorialStep() {
+  return TUTORIAL_STEPS[state.tutorial.stepIndex] || null;
+}
+
+function resetTutorialState(active = false) {
+  state.tutorial = {
+    active,
+    stepIndex: 0,
+    preparedStep: null,
+    waitingFor: null,
+    seenCardId: null,
+  };
+}
+
+function clearTutorialHighlight() {
+  document.querySelectorAll(".tutorial-highlight").forEach((element) => {
+    element.classList.remove("tutorial-highlight");
+  });
+}
+
+function getSelfZone(game = state.game) {
+  const selfId = game?.selfPlayerId;
+  if (!selfId) return null;
+  return document.querySelector(`[data-player-id="${selfId}"]`);
+}
+
+function getTutorialTarget(step, game = state.game) {
+  if (!step) return null;
+  const selfZone = getSelfZone(game);
+  if (step.target === "menu") return $("#settingsButton");
+  if (step.target === "score") return selfZone?.querySelector(".score") || null;
+  if (step.target === "deck") return selfZone?.querySelector(".deck-card") || null;
+  if (step.target === "openCard") return selfZone?.querySelector(".pile-slot") || null;
+  if (step.target === "bell") return $("#bellButton");
+  if (step.target === "timer") return $("#turnTimer");
+  if (step.target === "board") return $("#gameBoard");
+  return null;
+}
+
+function applyTutorialHighlight(step, game = state.game) {
+  clearTutorialHighlight();
+  const target = getTutorialTarget(step, game);
+  if (target) target.classList.add("tutorial-highlight");
+}
+
+function tutorialStepText(step) {
+  if (!step) return "";
+  return typeof step.text === "function" ? step.text() : step.text;
+}
+
+function tutorialControlHint(step) {
+  if (!step) return "";
+  if (step.key === "practice") {
+    return isMobileMode()
+      ? "게임 테이블 터치 → 카드 공개\n게임 테이블 터치 → 종 치기"
+      : "카드덱 클릭 → 카드 공개\n스페이스바 또는 종 클릭 → 종 치기";
+  }
+  if (step.waitingFor === "correctBell" || step.waitingFor === "wrongBell") {
+    return isMobileMode() ? "게임 화면을 터치해서 종을 치세요." : "스페이스바 또는 종을 클릭하세요.";
+  }
+  return "";
+}
+
+function hideTutorialOverlay() {
+  $("#tutorialOverlay")?.classList.add("hidden");
+  clearTutorialHighlight();
+}
+
+function prepareTutorialStep(step, game = state.game) {
+  if (!step || state.tutorial.preparedStep === step.key) return;
+  state.tutorial.preparedStep = step.key;
+  state.tutorial.waitingFor = step.waitingFor || null;
+
+  if (step.key === "deck") {
+    const self = getSelfPlayer(game);
+    state.tutorial.seenCardId = cardIdentity(self?.topCard);
+  }
+  if (step.key === "bell") {
+    socket.emit("setTutorialScenario", { scenario: "correctBell" });
+  }
+  if (step.key === "wrong") {
+    socket.emit("setTutorialScenario", { scenario: "wrongBell" });
+  }
+  if (step.key === "practice") {
+    socket.emit("startTutorialPractice");
+  }
+}
+
+function renderTutorialOverlay(game = state.game) {
+  const overlay = $("#tutorialOverlay");
+  if (!overlay) return;
+  const step = getTutorialStep();
+  if (!state.tutorial.active || !game?.isTutorial || !step || game.resultVisible || state.gameResult?.isTutorial) {
+    hideTutorialOverlay();
+    return;
+  }
+
+  prepareTutorialStep(step, game);
+  applyTutorialHighlight(step, game);
+  $("#tutorialStepLabel").textContent = step.label;
+  $("#tutorialText").textContent = tutorialStepText(step);
+  $("#tutorialControlHint").textContent = tutorialControlHint(step);
+  const nextButton = $("#tutorialNextButton");
+  const completeButton = $("#tutorialCompleteButton");
+  nextButton.textContent = step.nextText || "다음";
+  nextButton.classList.toggle("hidden", Boolean(step.waitingFor || step.practice));
+  completeButton.classList.toggle("hidden", false);
+  overlay.classList.remove("hidden");
+}
+
+function advanceTutorialStep() {
+  if (!state.tutorial.active) return;
+  const current = getTutorialStep();
+  state.tutorial.stepIndex = Math.min(state.tutorial.stepIndex + 1, TUTORIAL_STEPS.length - 1);
+  state.tutorial.preparedStep = null;
+  state.tutorial.waitingFor = null;
+  if (current?.key === "win") state.tutorial.seenCardId = null;
+  renderTutorialOverlay(state.game);
+}
+
+function syncTutorialWithGame(game) {
+  if (!game?.isTutorial) {
+    if (state.tutorial.active) resetTutorialState(false);
+    hideTutorialOverlay();
+    return;
+  }
+  if (!state.tutorial.active) resetTutorialState(true);
+
+  const step = getTutorialStep();
+  if (step?.waitingFor === "flip") {
+    const self = getSelfPlayer(game);
+    const currentCardId = cardIdentity(self?.topCard);
+    if (currentCardId && currentCardId !== state.tutorial.seenCardId) {
+      advanceTutorialStep();
+      return;
+    }
+  }
+  renderTutorialOverlay(game);
+}
+
+function handleTutorialBellResult(payload) {
+  if (!state.tutorial.active || !state.game?.isTutorial) return false;
+  const step = getTutorialStep();
+  if (step?.waitingFor === "correctBell" && payload?.correct) {
+    setTimeout(advanceTutorialStep, 700);
+    return true;
+  }
+  if (step?.waitingFor === "wrongBell" && !payload?.correct) {
+    setTimeout(advanceTutorialStep, 700);
+    return true;
+  }
+  return false;
+}
+
 function renderRoom(room) {
   if (!room) {
     state.room = null;
     state.game = null;
     state.gameResult = null;
     victoryPlayedForResult = false;
+    resetTutorialState(false);
+    hideTutorialOverlay();
+    const overlay = $("#resultOverlay");
+    if (overlay) {
+      overlay.className = "result-overlay hidden";
+      overlay.innerHTML = "";
+    }
     showScreen("lobby");
     renderLobby();
     return;
@@ -937,6 +1197,7 @@ function renderGame(game) {
   updateMobileGameInfoPanel();
   updateMobileTouchHint(game);
   updateGameOverlay(game);
+  syncTutorialWithGame(game);
 }
 
 function renderGameInfoPanel(game) {
@@ -972,9 +1233,11 @@ function renderGameUsers(players) {
   if (!list) return;
   list.innerHTML = players.map((player) => {
     const stats = player.stats || {};
-    const meta = player.isAI
-      ? `AI ${aiDifficultyLabel(player.aiDifficulty)}`
-      : `${Number(stats.wins || 0)}승 ${Number(stats.losses || 0)}패 ${formatWinRate(stats.winRate)}`;
+    const meta = state.game?.isTutorial
+      ? (player.isAI ? "느린 튜토리얼 AI" : "튜토리얼 참여중")
+      : player.isAI
+        ? `AI ${aiDifficultyLabel(player.aiDifficulty)}`
+        : `${Number(stats.wins || 0)}승 ${Number(stats.losses || 0)}패 ${formatWinRate(stats.winRate)}`;
     return `
       <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
         <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
@@ -1045,6 +1308,14 @@ function handleMobileGameBoardTouch(event) {
   if (shouldIgnoreMobileGameTouch(event)) return;
   const now = Date.now();
   if (now - mobileTouchLastAt < 300) return;
+
+  const tutorialStep = getTutorialStep();
+  if (state.game?.isTutorial && (tutorialStep?.waitingFor === "correctBell" || tutorialStep?.waitingFor === "wrongBell")) {
+    mobileTouchLastAt = now;
+    event.preventDefault();
+    socket.emit("ringBell");
+    return;
+  }
 
   if (isBellAvailable()) {
     mobileTouchLastAt = now;
@@ -1219,6 +1490,18 @@ function updateGameOverlay(game) {
 }
 
 function renderGameResult(result) {
+  if (result.isTutorial) {
+    return `
+      <div class="result-box">
+        <h2>튜토리얼 완료!</h2>
+        <p class="hint-text">이제 실제 게임에 참가해보세요.</p>
+        <div class="result-actions">
+          <button class="primary-button overlay-leave-button" type="button">대기실로 이동</button>
+        </div>
+      </div>
+    `;
+  }
+
   const isWinner = result.winner?.id === result.selfPlayerId;
   const title = isWinner ? "승리" : "패배";
   const hint = isWinner
@@ -1326,6 +1609,12 @@ $("#nicknameForm").addEventListener("submit", (event) => {
 });
 
 $("#openCreateRoomButton").addEventListener("click", openCreateRoomModal);
+$("#guideToggleButton")?.addEventListener("click", toggleLobbyGuide);
+$("#tutorialButton")?.addEventListener("click", () => {
+  closeSettingsPanel();
+  resetTutorialState(true);
+  socket.emit("startTutorial");
+});
 $("#closeCreateRoomModalButton").addEventListener("click", closeCreateRoomModal);
 $("#createRoomModal").addEventListener("click", (event) => {
   if (event.target.id === "createRoomModal") closeCreateRoomModal();
@@ -1408,6 +1697,8 @@ $("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
 $("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
+$("#tutorialNextButton")?.addEventListener("click", advanceTutorialStep);
+$("#tutorialCompleteButton")?.addEventListener("click", () => socket.emit("completeTutorial"));
 $("#gameBoard")?.addEventListener("pointerup", handleMobileGameBoardTouch);
 $("#gameInfoToggleButton")?.addEventListener("click", () => {
   state.mobileGameInfoExpanded = !state.mobileGameInfoExpanded;
@@ -1440,6 +1731,10 @@ $("#sfxVolumeSlider").addEventListener("input", (event) => {
 
 $("#leaveButton").addEventListener("click", () => {
   closeSettingsPanel();
+  if (state.activeScreen === "game" && state.game?.isTutorial) {
+    socket.emit("completeTutorial");
+    return;
+  }
   if (state.activeScreen === "room" || state.activeScreen === "game") {
     socket.emit("leaveRoom");
     return;
@@ -1450,6 +1745,8 @@ $("#leaveButton").addEventListener("click", () => {
     state.lobby = null;
     state.room = null;
     state.game = null;
+    resetTutorialState(false);
+    hideTutorialOverlay();
     showScreen("nickname");
     socket.connect();
   }
@@ -1545,6 +1842,7 @@ socket.on("bellResult", (payload) => {
   showScoreDeltas(payload.scoreChanges);
   const message = payload.correct ? `${ringerName} 정답!` : `${ringerName} 오답!`;
   showToast(message);
+  handleTutorialBellResult(payload);
 });
 
 socket.on("timeoutResult", (payload) => {
@@ -1574,6 +1872,12 @@ socket.on("emoteEvent", (payload) => {
 socket.on("gameResult", (payload) => {
   payload.selfPlayerId = state.game?.selfPlayerId;
   state.gameResult = payload;
+  if (payload.isTutorial) {
+    hideTutorialOverlay();
+    resetTutorialState(false);
+    updateGameOverlay(state.game || { wrongFlash: false });
+    return;
+  }
   const isWinner = payload.winner?.id === payload.selfPlayerId;
   const returnAfterMs = payload.returnAfterMs || 5000;
   if (isWinner && !victoryPlayedForResult) {
@@ -1608,6 +1912,7 @@ preloadAssets();
 applyBgmMode(getStoredBgmMode(), false);
 applyBgmVolume(getStoredBgmVolume());
 applySfxVolume(getStoredSfxVolume());
+applyLobbyGuideCollapsed(isLobbyGuideCollapsed());
 setupBellImage();
 startLatencyMonitor();
 updateResponsiveSizes();
