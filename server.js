@@ -30,8 +30,16 @@ const CARD_TOTAL_WEIGHTS = [
   { count: 5, weight: 5 },
 ];
 const AI_CORRECT_MISS_PROBABILITY = 0.1;
-const AI_WRONG_BELL_PROBABILITY = 0.003;
-const AI_MIN_BELL_REACTION_MS = 550;
+const AI_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced"]);
+const DEFAULT_AI_DIFFICULTY = "intermediate";
+const AI_DIFFICULTY_SETTINGS = {
+  beginner: { label: "초급", correctDelay: [900, 1600], mistakeChance: 0.05 },
+  intermediate: { label: "중급", correctDelay: [550, 1100], mistakeChance: 0.02 },
+  advanced: { label: "고급", correctDelay: [350, 750], mistakeChance: 0.005 },
+};
+const AI_MIN_BELL_REACTION_MS = 300;
+const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
+const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
 const EMOTES = {
   "1": "웃음",
   "2": "조롱",
@@ -50,6 +58,7 @@ let userdata = { users: {} };
 let userdataDirty = false;
 let userdataWriting = false;
 let userdataWriteAgain = false;
+let rankBadgeCache = new Map();
 
 function logEvent(label, detail = "") {
   console.log(`[${new Date().toISOString()}] ${label}${detail ? ` - ${detail}` : ""}`);
@@ -194,6 +203,24 @@ function serializeRankRow(row, includeRate = false) {
   return base;
 }
 
+function refreshRankBadgeCache(topWins, topWinRates) {
+  const next = new Map();
+  const addBadge = (nickname, type, rank, symbol) => {
+    if (!nickname || !symbol) return;
+    const badges = next.get(nickname) || [];
+    badges.push({ type, rank, symbol });
+    next.set(nickname, badges);
+  };
+
+  topWins.forEach((row, index) => addBadge(row.nickname, "wins", index + 1, WIN_RANK_SYMBOLS[index]));
+  topWinRates.forEach((row, index) => addBadge(row.nickname, "rate", index + 1, RATE_RANK_SYMBOLS[index]));
+  rankBadgeCache = next;
+}
+
+function getRankBadges(nickname) {
+  return rankBadgeCache.get(nickname) || [];
+}
+
 async function getRankings() {
   const rows = Object.entries(userdata.users).map(([nickname, record]) => ({
     ...getNicknameProfile(nickname),
@@ -210,6 +237,10 @@ async function getRankings() {
     .sort((a, b) => b.winRate - a.winRate || b.wins - a.wins || a.updatedAt.localeCompare(b.updatedAt))
     .slice(0, 3)
     .map((row) => serializeRankRow(row, true));
+
+  refreshRankBadgeCache(topWins, topWinRates);
+  for (const row of topWins) row.rankBadges = getRankBadges(row.nickname);
+  for (const row of topWinRates) row.rankBadges = getRankBadges(row.nickname);
 
   return { topWins, topWinRates };
 }
@@ -343,6 +374,20 @@ function getTurnDurationMs(room) {
   return getTurnTime(room) * 1000;
 }
 
+function getAIDifficulty(room) {
+  const difficulty = String(room?.aiDifficulty || DEFAULT_AI_DIFFICULTY);
+  return AI_DIFFICULTIES.has(difficulty) ? difficulty : DEFAULT_AI_DIFFICULTY;
+}
+
+function getAIDifficultySettings(room) {
+  return AI_DIFFICULTY_SETTINGS[getAIDifficulty(room)] || AI_DIFFICULTY_SETTINGS[DEFAULT_AI_DIFFICULTY];
+}
+
+function snapshotPlayerStats(player) {
+  if (!player || player.isAI) return null;
+  return normalizeStatRecord(userdata.users[player.nickname] || {});
+}
+
 function roomActivePlayerCount(room) {
   return room.players.filter((player) => !player.spectator).length;
 }
@@ -354,6 +399,7 @@ function serializeRoomForLobby(room) {
     mode: room.mode,
     penaltyMultiplier: getPenaltyMultiplier(room),
     turnTime: getTurnTime(room),
+    aiDifficulty: getAIDifficulty(room),
     currentPlayers: room.players.filter((player) => !player.spectator).length,
     maxPlayers: room.maxPlayers,
     hasPassword: room.hasPassword,
@@ -388,6 +434,7 @@ function getOnlineUsersPayload() {
         nickname: user.nickname,
         displayName: user.displayName,
         isVaNickname: user.isVaNickname,
+        rankBadges: getRankBadges(user.nickname),
         status,
         statusLabel,
         roomId,
@@ -408,6 +455,7 @@ async function makeLobbyPayload(nickname) {
       nickname: profile.nickname,
       displayName: profile.displayName,
       isVaNickname: profile.isVaNickname,
+      rankBadges: getRankBadges(profile.nickname),
     },
     myStats: stats,
     top3: rankings.topWins,
@@ -438,6 +486,7 @@ function serializeRoom(room, selfPlayerId = null) {
     mode: room.mode,
     penaltyMultiplier: getPenaltyMultiplier(room),
     turnTime: getTurnTime(room),
+    aiDifficulty: getAIDifficulty(room),
     hasPassword: room.hasPassword,
     maxPlayers: room.maxPlayers,
     status: room.status,
@@ -449,7 +498,9 @@ function serializeRoom(room, selfPlayerId = null) {
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      rankBadges: player.isAI ? [] : getRankBadges(player.nickname),
       isAI: player.isAI,
+      aiDifficulty: player.isAI ? getAIDifficulty(room) : null,
       ready: player.ready,
       isHost: player.id === room.hostId,
       connected: player.connected,
@@ -472,6 +523,8 @@ function serializeGame(room, selfPlayerId = null) {
     mode: room.mode,
     penaltyMultiplier: getPenaltyMultiplier(room),
     turnTime: getTurnTime(room),
+    aiDifficulty: getAIDifficulty(room),
+    aiDifficultyLabel: getAIDifficultySettings(room).label,
     statsExcluded: room.statsEnabled === false,
     status: room.status,
     selfPlayerId,
@@ -483,15 +536,20 @@ function serializeGame(room, selfPlayerId = null) {
     matchedCharacters: game?.matchedCharacters || [],
     wrongFlash: Boolean(game?.wrongFlash),
     resultVisible: Boolean(game?.resultVisible),
+    recentReactionSpeeds: game?.recentReactionSpeeds || [],
     players: room.players.map((player) => ({
       id: player.id,
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      rankBadges: player.isAI ? [] : getRankBadges(player.nickname),
       isAI: player.isAI,
+      aiDifficulty: player.isAI ? getAIDifficulty(room) : null,
+      aiDifficultyLabel: player.isAI ? getAIDifficultySettings(room).label : null,
       isHost: player.id === room.hostId,
       connected: player.connected,
       score: player.score,
+      stats: player.isAI ? null : (player.statsSnapshot || snapshotPlayerStats(player)),
       deckCount: player.spectator ? 0 : (player.deck?.length || PRIVATE_DECK_SIZE),
       faceUpCount: player.faceUpCards?.length || 0,
       topCard: serializeCard(player.faceUpCards?.[player.faceUpCards.length - 1] || null),
@@ -905,6 +963,21 @@ function evaluateBell(room) {
   };
 }
 
+function updateCorrectConditionWindow(room) {
+  if (!room?.game) return;
+  const verdict = evaluateBell(room);
+  if (!verdict.correct) {
+    room.game.correctConditionStartedAt = null;
+    room.game.correctConditionVersion = -1;
+    return;
+  }
+  if (!room.game.correctConditionStartedAt) {
+    room.game.correctConditionStartedAt = Date.now();
+    room.game.correctConditionVersion = room.game.tableVersion;
+    logEvent("Correct condition opened", `${room.title} version=${room.game.tableVersion}`);
+  }
+}
+
 function cardFingerprint(card) {
   return JSON.stringify({
     cardId: card.cardId || card.id,
@@ -951,7 +1024,7 @@ function analyzeAIMistakeRisk(room, verdict) {
   if (counts.some((count) => count >= 6)) reasons.push("over-five");
   if (room.mode === "hard" && complexCards >= 2) reasons.push("hard-complex");
   if (totalVisibleItems >= 12 || (cards.length >= 4 && totalVisibleItems >= 10)) reasons.push("crowded-table");
-  if (recentOpenAge >= 0 && recentOpenAge <= 650) reasons.push("recent-open");
+  if (recentOpenAge >= 0 && recentOpenAge <= 800) reasons.push("recent-open");
 
   return {
     allowed: reasons.includes("recent-open") && reasons.some((reason) => reason !== "recent-open"),
@@ -986,7 +1059,11 @@ function clearRoundCards(room) {
     if (player.spectator) player.deckCount = 0;
     else player.deckCount = player.deck?.length || PRIVATE_DECK_SIZE;
   }
-  if (room.game) room.game.openPileFingerprints = {};
+  if (room.game) {
+    room.game.openPileFingerprints = {};
+    room.game.correctConditionStartedAt = null;
+    room.game.correctConditionVersion = -1;
+  }
 }
 
 function getWinner(room) {
@@ -1112,6 +1189,7 @@ function beginGame(room) {
     player.eliminated = false;
     player.spectator = false;
     player.connected = true;
+    player.statsSnapshot = player.isAI ? null : snapshotPlayerStats(player);
     logEvent("deck initialized", `player=${player.nickname} cardIds=[${player.deck.map((card) => card.cardId).join(",")}]`);
   }
 
@@ -1131,6 +1209,9 @@ function beginGame(room) {
     openPileFingerprints: {},
     lastCardOpenedAt: 0,
     lastOpenedCardId: null,
+    correctConditionStartedAt: null,
+    correctConditionVersion: -1,
+    recentReactionSpeeds: [],
     resultVisible: false,
     resultTimer: null,
     roundTimer: null,
@@ -1161,6 +1242,7 @@ function handleFlipCard(room, player) {
   room.game.lastCardOpenedAt = Date.now();
   room.game.lastOpenedCardId = openedCard.cardId;
   room.game.tableVersion += 1;
+  updateCorrectConditionWindow(room);
   setCurrentTurn(room, nextAlivePlayerId(room, player.id));
   logEvent(
     "flip",
@@ -1177,19 +1259,22 @@ function scaledPenalty(room, basePenalty) {
 }
 
 function applyCorrectPenalty(room, bellRinger) {
+  const changes = [];
   for (const player of getActivePlayers(room)) {
     if (player.id === bellRinger.id) continue;
     const penalty = scaledPenalty(room, (player.faceUpCards.length || 0) * BASE_PENALTY);
     player.score -= penalty;
+    if (penalty > 0) changes.push({ playerId: player.id, delta: -penalty, score: player.score });
     if (penalty > 0) logEvent("Score changed", `${player.nickname} -${penalty} = ${player.score}`);
   }
+  return changes;
 }
 
 function applyWrongPenalty(room, bellRinger) {
   const penalty = scaledPenalty(room, getActivePlayers(room).length * BASE_PENALTY);
   bellRinger.score -= penalty;
   logEvent("Score changed", `${bellRinger.nickname} -${penalty} = ${bellRinger.score}`);
-  return penalty;
+  return { playerId: bellRinger.id, delta: -penalty, score: bellRinger.score };
 }
 
 function handleBell(room, bellRinger) {
@@ -1204,12 +1289,27 @@ function handleBell(room, bellRinger) {
   room.game.wrongFlash = !verdict.correct;
   logEvent("Bell input", `${bellRinger.nickname} / ${room.title}`);
 
+  let scoreChanges = [];
   if (verdict.correct) {
     logEvent("Correct", `${bellRinger.nickname} / ${verdict.matchedCharacters.join(",")}`);
-    applyCorrectPenalty(room, bellRinger);
+    const reactedAt = Date.now();
+    const reactionMs = room.game.correctConditionStartedAt
+      ? Math.max(0, reactedAt - room.game.correctConditionStartedAt)
+      : null;
+    if (reactionMs !== null) {
+      room.game.recentReactionSpeeds = [{
+        playerId: bellRinger.id,
+        nickname: bellRinger.nickname,
+        displayName: bellRinger.displayName,
+        isAI: bellRinger.isAI,
+        isVaNickname: bellRinger.isVaNickname,
+        reactionMs,
+      }];
+    }
+    scoreChanges = applyCorrectPenalty(room, bellRinger);
   } else {
     logEvent("Wrong", bellRinger.nickname);
-    applyWrongPenalty(room, bellRinger);
+    scoreChanges = [applyWrongPenalty(room, bellRinger)];
   }
 
   eliminatePlayersIfNeeded(room);
@@ -1222,6 +1322,8 @@ function handleBell(room, bellRinger) {
     bellRingerDisplayName: bellRinger.displayName,
     bellRingerIsVaNickname: bellRinger.isVaNickname,
     matchedCharacters: verdict.matchedCharacters,
+    reactionSpeeds: room.game.recentReactionSpeeds || [],
+    scoreChanges,
   });
   emitGameState(room);
 
@@ -1253,7 +1355,7 @@ function applyTimeoutPenalty(room, player) {
   const penalty = scaledPenalty(room, getActivePlayers(room).length * BASE_PENALTY);
   player.score -= penalty;
   logEvent("Timeout penalty", `${player.nickname} -${penalty} = ${player.score}`);
-  return penalty;
+  return { playerId: player.id, delta: -penalty, score: player.score };
 }
 
 function handleTurnTimeout(room, playerId) {
@@ -1266,7 +1368,7 @@ function handleTurnTimeout(room, playerId) {
   room.game.matchedCharacters = [];
   room.game.wrongFlash = true;
 
-  const penalty = applyTimeoutPenalty(room, player);
+  const scoreChange = applyTimeoutPenalty(room, player);
   eliminatePlayersIfNeeded(room);
   const winner = getWinner(room);
 
@@ -1275,7 +1377,8 @@ function handleTurnTimeout(room, playerId) {
     playerName: player.nickname,
     playerDisplayName: player.displayName,
     playerIsVaNickname: player.isVaNickname,
-    penalty,
+    penalty: Math.abs(scoreChange.delta),
+    scoreChanges: [scoreChange],
   });
   emitGameState(room);
 
@@ -1335,15 +1438,19 @@ function scheduleAIBell(room) {
 
   const verdict = evaluateBell(room);
   const mistakeRisk = analyzeAIMistakeRisk(room, verdict);
+  const difficulty = getAIDifficultySettings(room);
   const aiPlayers = getActivePlayers(room).filter((player) => player.isAI);
   for (const ai of aiPlayers) {
     if (verdict.correct && Math.random() < AI_CORRECT_MISS_PROBABILITY) continue;
     if (!verdict.correct) {
       if (!mistakeRisk.allowed) continue;
-      if (Math.random() >= AI_WRONG_BELL_PROBABILITY) continue;
+      if (Math.random() >= difficulty.mistakeChance) continue;
     }
 
-    const delay = randomInt(verdict.correct ? AI_MIN_BELL_REACTION_MS : 700, verdict.correct ? 1800 : 2200);
+    const [correctMin, correctMax] = difficulty.correctDelay;
+    const delay = verdict.correct
+      ? Math.max(AI_MIN_BELL_REACTION_MS, randomInt(correctMin, correctMax))
+      : randomInt(300, 800);
     const aiId = ai.id;
     const tableVersion = room.game.tableVersion;
     if (!verdict.correct) {
@@ -1504,7 +1611,15 @@ io.on("connection", (socket) => {
     emitLobbyState(socket);
   });
 
-  socket.on("createRoom", ({ title, isPrivate, password, maxPlayers, aiCount, mode, penaltyMultiplier, turnTime } = {}) => {
+  socket.on("latencyPing", ({ nonce, sentAt } = {}) => {
+    socket.emit("latencyPong", {
+      nonce,
+      sentAt,
+      serverTime: Date.now(),
+    });
+  });
+
+  socket.on("createRoom", ({ title, isPrivate, password, maxPlayers, aiCount, mode, penaltyMultiplier, turnTime, aiDifficulty } = {}) => {
     const user = getCurrentUser(socket);
     if (!user || user.roomId) return;
     const roomTitle = String(title || "").trim();
@@ -1513,6 +1628,7 @@ io.on("connection", (socket) => {
     const roomMode = GAME_MODES.has(String(mode)) ? String(mode) : "normal";
     const penalty = PENALTY_MULTIPLIERS.has(Number(penaltyMultiplier)) ? Number(penaltyMultiplier) : 1;
     const selectedTurnTime = TURN_TIME_OPTIONS.has(Number(turnTime)) ? Number(turnTime) : DEFAULT_TURN_TIME;
+    const selectedAIDifficulty = AI_DIFFICULTIES.has(String(aiDifficulty)) ? String(aiDifficulty) : DEFAULT_AI_DIFFICULTY;
 
     if (!isValidTitle(roomTitle)) {
       socket.emit("errorMessage", "방 제목은 1~10자로 입력해 주세요.");
@@ -1537,6 +1653,7 @@ io.on("connection", (socket) => {
       mode: roomMode,
       penaltyMultiplier: penalty,
       turnTime: selectedTurnTime,
+      aiDifficulty: selectedAIDifficulty,
       hasPassword: Boolean(isPrivate),
       password: isPrivate ? String(password) : "",
       maxPlayers: max,
@@ -1666,6 +1783,16 @@ io.on("connection", (socket) => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
     if (!removeAIFromRoom(room)) socket.emit("errorMessage", "제거할 AI가 없습니다.");
+    emitRoomState(room);
+    emitLobbyState();
+  });
+
+  socket.on("setAIDifficulty", ({ aiDifficulty } = {}) => {
+    const { room, player } = getSocketRoomAndPlayer(socket);
+    if (!room || !player || player.id !== room.hostId || room.status !== "waiting") return;
+    const selected = AI_DIFFICULTIES.has(String(aiDifficulty)) ? String(aiDifficulty) : DEFAULT_AI_DIFFICULTY;
+    room.aiDifficulty = selected;
+    logEvent("AI difficulty changed", `${room.title} / ${AI_DIFFICULTY_SETTINGS[selected].label}`);
     emitRoomState(room);
     emitLobbyState();
   });

@@ -152,6 +152,14 @@
             <aside class="panel room-actions">
               <h2>준비</h2>
               <button id="readyButton" class="primary-button" type="button">준비</button>
+              <label class="room-ai-difficulty-row">
+                <span>AI 난이도</span>
+                <select id="roomAIDifficultySelect">
+                  <option value="beginner">초급</option>
+                  <option value="intermediate">중급</option>
+                  <option value="advanced">고급</option>
+                </select>
+              </label>
               <button id="addAIButton" class="secondary-button" type="button">AI 추가</button>
               <button id="removeAIButton" class="secondary-button" type="button">AI 제거</button>
               <button id="startGameButton" class="primary-button" type="button">게임 시작</button>
@@ -162,14 +170,30 @@
         </section>
 
         <section id="gameScreen" class="screen hidden game-screen">
-          <div class="game-board">
-            <div id="bellLog" class="bell-log hidden"></div>
-            <div id="gamePlayers" class="game-players"></div>
-            <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">
-              <img id="bellImage" src="/assets/bell/bell.png?v=2" alt="" aria-hidden="true" />
-              <span class="bell-fallback">종</span>
-            </button>
-            <div id="resultOverlay" class="result-overlay hidden"></div>
+          <div class="game-layout">
+            <div id="gameBoard" class="game-board">
+              <div id="bellLog" class="bell-log hidden"></div>
+              <div id="gamePlayers" class="game-players"></div>
+              <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">
+                <img id="bellImage" src="/assets/bell/bell.png?v=2" alt="" aria-hidden="true" />
+                <span class="bell-fallback">종</span>
+              </button>
+              <div id="resultOverlay" class="result-overlay hidden"></div>
+            </div>
+            <aside id="gameInfoPanel" class="game-info-panel" aria-label="게임 정보">
+              <section class="game-info-card">
+                <h2>최근 정답 반응속도</h2>
+                <ol id="reactionSpeedList" class="reaction-speed-list"></ol>
+              </section>
+              <section class="game-info-card">
+                <h2>현재 게임 유저</h2>
+                <div id="gameUserInfoList" class="game-user-info-list"></div>
+              </section>
+              <section class="game-info-card latency-card">
+                <h2>서버 응답속도</h2>
+                <strong id="serverLatencyValue" class="latency-value latency-measuring">측정 중</strong>
+              </section>
+            </aside>
           </div>
         </section>
       </main>
@@ -211,6 +235,14 @@
             <option value="3">3</option>
             <option value="4">4</option>
             <option value="5">5</option>
+          </select>
+        </label>
+        <label>
+          <span>AI 난이도</span>
+          <select id="aiDifficultySelect">
+            <option value="beginner">초급</option>
+            <option value="intermediate" selected>중급</option>
+            <option value="advanced">고급</option>
           </select>
         </label>
         <fieldset class="mode-field">

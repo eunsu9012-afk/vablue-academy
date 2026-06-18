@@ -40,6 +40,17 @@ const CARD_COLORS = {
   nano: "#d9faed",
   ruchel: "#dceeff",
 };
+const AI_DIFFICULTY_LABELS = {
+  beginner: "초급",
+  intermediate: "중급",
+  advanced: "고급",
+};
+const STATUS_ICONS = {
+  lobby: "🔵",
+  waiting: "🟢",
+  full: "🟠",
+  playing: "🔴",
+};
 
 const screens = {
   nickname: document.querySelector("#nicknameScreen"),
@@ -58,6 +69,7 @@ const state = {
   gameResult: null,
   onlineUsersExpanded: false,
   spectatorOverlayDismissedFor: null,
+  latency: { value: null, state: "measuring" },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -66,6 +78,9 @@ let victoryPlayedForResult = false;
 let turnTimerInterval = null;
 let bellLogTimer = null;
 let bellAnimationTimer = null;
+let latencyTimer = null;
+let latencyNonce = 0;
+const pendingLatencyPings = new Map();
 
 function showScreen(name) {
   Object.entries(screens).forEach(([screenName, element]) => {
@@ -136,7 +151,17 @@ function displayName(player) {
 
 function renderName(player) {
   const className = player?.isVaNickname ? "va-name" : "";
-  return `<span class="${className}">${escapeHtml(displayName(player))}</span>`;
+  return `${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span>`;
+}
+
+function renderRankBadges(player) {
+  const badges = Array.isArray(player?.rankBadges) ? player.rankBadges : [];
+  if (!badges.length) return "";
+  return `<span class="rank-badges">${badges.map((badge) => escapeHtml(badge.symbol)).join("")}</span>`;
+}
+
+function renderHostBadge(player) {
+  return player?.isHost && !player?.isAI ? `<span class="host-inline">👑 방장</span>` : "";
 }
 
 function modeLabel(mode) {
@@ -145,6 +170,10 @@ function modeLabel(mode) {
 
 function penaltyLabel(value) {
   return `${Number(value || 1)}배`;
+}
+
+function aiDifficultyLabel(value) {
+  return AI_DIFFICULTY_LABELS[value] || AI_DIFFICULTY_LABELS.intermediate;
 }
 
 // BGM is intentionally resilient: missing files are skipped and the app stays silent.
@@ -410,7 +439,7 @@ function showUserContextMenu(user, x, y) {
   const joinDisabled = user.status !== "waiting";
   menu.innerHTML = `
     <div class="context-title">${renderName(user)}</div>
-    <div class="context-status">[${escapeHtml(user.statusLabel)}]</div>
+    <div class="context-status status-${escapeHtml(user.status)}">${STATUS_ICONS[user.status] || "•"} [${escapeHtml(user.statusLabel)}]</div>
     <button class="context-item join-user ${joinDisabled ? "is-disabled" : ""}" type="button" data-disabled="${joinDisabled}">같이하기</button>
     <button class="context-item hide-user" type="button">숨기기</button>
   `;
@@ -495,6 +524,7 @@ function renderLobby() {
         <span class="pill">${room.currentPlayers}/${room.maxPlayers}</span>
         <span class="badge mode-badge">[${modeLabel(room.mode)}]</span>
         <span class="badge penalty-badge">[${penaltyLabel(room.penaltyMultiplier)}]</span>
+        <span class="badge ai-difficulty-badge">[AI: ${aiDifficultyLabel(room.aiDifficulty)}]</span>
         ${room.hasPassword ? `<span class="badge">비번</span>` : ""}
         <span class="badge">${room.status === "waiting" ? "대기중" : "진행중"}</span>
       </div>
@@ -527,6 +557,7 @@ function renderOnlineUsers() {
     item.type = "button";
     item.className = `online-user status-${user.status}`;
     item.innerHTML = `
+      <span class="status-dot" aria-hidden="true">${STATUS_ICONS[user.status] || "•"}</span>
       <span class="online-user-name">${renderName(user)}</span>
       <span class="badge">[${escapeHtml(user.statusLabel)}]</span>
     `;
@@ -566,12 +597,17 @@ function renderRoom(room) {
   victoryPlayedForResult = false;
   showScreen("room");
   setText("#roomTitle", room.title);
-  setText("#roomCount", `[${modeLabel(room.mode)}] [${penaltyLabel(room.penaltyMultiplier)}] ${room.players.length}/${room.maxPlayers}`);
+  setText("#roomCount", `[${modeLabel(room.mode)}] [${penaltyLabel(room.penaltyMultiplier)}] [AI: ${aiDifficultyLabel(room.aiDifficulty)}] ${room.players.length}/${room.maxPlayers}`);
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
   const isHost = self?.id === room.hostId;
   const humanPlayers = room.players.filter((player) => !player.isAI);
   const allHumansReady = humanPlayers.length > 0 && humanPlayers.every((player) => player.ready);
+  const aiDifficultySelect = $("#roomAIDifficultySelect");
+  if (aiDifficultySelect) {
+    aiDifficultySelect.value = room.aiDifficulty || "intermediate";
+    aiDifficultySelect.disabled = !isHost || room.status !== "waiting";
+  }
   const playerList = $("#roomPlayers");
   playerList.innerHTML = "";
 
@@ -579,10 +615,11 @@ function renderRoom(room) {
     const item = document.createElement("article");
     item.className = "waiting-player";
     item.innerHTML = `
-      <h3>${renderName(player)}</h3>
+      <h3>${renderName(player)} ${renderHostBadge(player)}</h3>
       <div class="badge-row">
         ${player.isHost ? `<span class="badge host">방장</span>` : ""}
         ${player.isAI ? `<span class="badge ai">[AI]</span>` : ""}
+        ${player.isAI ? `<span class="badge ai-difficulty-badge">AI ${aiDifficultyLabel(room.aiDifficulty)}</span>` : ""}
         <span class="badge ${player.ready ? "ready" : "not-ready"}">${player.ready ? "[준비]" : "[미준비]"}</span>
       </div>
     `;
@@ -612,10 +649,12 @@ function getSeatPosition(index, count) {
 function updateResponsiveSizes() {
   const root = document.documentElement;
   const count = state.game?.players?.length || 6;
-  const width = Math.max(360, window.innerWidth);
-  const height = Math.max(560, window.innerHeight);
-  const boardHeight = Math.max(420, height - 104);
-  const tableScale = Math.min(1.35, Math.max(0.72, Math.min(width / 1280, height / 720)));
+  const board = $("#gameBoard") || document.querySelector(".game-board");
+  const boardRect = board?.getBoundingClientRect();
+  const width = Math.max(360, Math.floor(boardRect?.width || window.innerWidth));
+  const height = Math.max(420, Math.floor(boardRect?.height || window.innerHeight - 104));
+  const boardHeight = Math.max(420, height);
+  const tableScale = Math.min(1.35, Math.max(0.72, Math.min(width / 1030, height / 620)));
   const targetByCount = count <= 2 ? 300 : count <= 3 ? 220 : count <= 4 ? 160 : count <= 5 ? 140 : 130;
   const widthLimitByCount = count <= 2 ? width / 4.4 : count <= 3 ? width / 5.6 : count <= 4 ? width / 6.4 : width / 8.55;
   const heightLimitByCount = count <= 2 ? boardHeight / 2.25 : count <= 3 ? boardHeight / 2.8 : count <= 4 ? boardHeight / 3.35 : boardHeight / 4.45;
@@ -663,6 +702,8 @@ function createPlayerZone(playerId) {
       <div class="deck-slot"></div>
       <div class="pile-slot"></div>
     </div>
+    <div class="score-delta-layer" aria-hidden="true"></div>
+    <div class="eliminated-badge">탈락</div>
   `;
   return zone;
 }
@@ -751,7 +792,7 @@ function renderGame(game) {
     const isSelf = player.id === game.selfPlayerId;
     const canFlip = isSelf && !player.spectator && player.id === game.currentTurnPlayerId && !game.bellLocked;
 
-    zone.querySelector(".player-name").innerHTML = renderName(player);
+    zone.querySelector(".player-name").innerHTML = `${renderName(player)} ${renderHostBadge(player)}`;
     zone.querySelector(".score").textContent = player.score;
 
     const deckSlot = zone.querySelector(".deck-slot");
@@ -766,7 +807,106 @@ function renderGame(game) {
   }
 
   startTurnTimer(game);
+  renderGameInfoPanel(game);
   updateGameOverlay(game);
+}
+
+function renderGameInfoPanel(game) {
+  renderReactionSpeeds(game.recentReactionSpeeds || []);
+  renderGameUsers(game.players || []);
+  renderLatency();
+}
+
+function renderReactionSpeeds(rows) {
+  const list = $("#reactionSpeedList");
+  if (!list) return;
+  const topRows = rows.slice(0, 3);
+  if (!topRows.length) {
+    list.innerHTML = `<li class="empty-info">정답 대기 중</li>`;
+    return;
+  }
+  list.innerHTML = topRows.map((row, index) => `
+    <li>
+      <span>${index + 1}위 ${escapeHtml(formatReactionPlayerName(row))}</span>
+      <strong>${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
+    </li>
+  `).join("");
+}
+
+function formatReactionPlayerName(row) {
+  const name = row.displayName || row.nickname || "";
+  if (!row.isAI || /^AI\\s/.test(name)) return name;
+  return `AI ${name}`;
+}
+
+function renderGameUsers(players) {
+  const list = $("#gameUserInfoList");
+  if (!list) return;
+  list.innerHTML = players.map((player) => {
+    const stats = player.stats || {};
+    const meta = player.isAI
+      ? `AI ${aiDifficultyLabel(player.aiDifficulty)}`
+      : `${Number(stats.wins || 0)}승 ${Number(stats.losses || 0)}패 ${formatWinRate(stats.winRate)}`;
+    return `
+      <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
+        <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
+        <span>${escapeHtml(meta)}</span>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderLatency() {
+  const element = $("#serverLatencyValue");
+  if (!element) return;
+  element.classList.remove("latency-good", "latency-warn", "latency-bad", "latency-measuring");
+  if (state.latency.state === "unstable") {
+    element.textContent = "불안정";
+    element.classList.add("latency-bad");
+    return;
+  }
+  if (!Number.isFinite(state.latency.value)) {
+    element.textContent = "측정 중";
+    element.classList.add("latency-measuring");
+    return;
+  }
+  const value = Math.round(state.latency.value);
+  element.textContent = `${value}ms`;
+  element.classList.add(value <= 80 ? "latency-good" : value <= 150 ? "latency-warn" : "latency-bad");
+}
+
+function sendLatencyPing() {
+  if (!socket.connected) return;
+  const nonce = `${Date.now()}-${latencyNonce++}`;
+  pendingLatencyPings.set(nonce, Date.now());
+  socket.emit("latencyPing", { nonce, sentAt: Date.now() });
+  setTimeout(() => {
+    if (!pendingLatencyPings.has(nonce)) return;
+    pendingLatencyPings.delete(nonce);
+    state.latency = { value: null, state: "unstable" };
+    renderLatency();
+  }, 2500);
+}
+
+function startLatencyMonitor() {
+  if (latencyTimer) return;
+  sendLatencyPing();
+  latencyTimer = setInterval(sendLatencyPing, 5000);
+}
+
+function showScoreDeltas(changes = []) {
+  if (!Array.isArray(changes)) return;
+  for (const change of changes) {
+    if (!change || !Number.isFinite(Number(change.delta))) continue;
+    const zone = document.querySelector(`[data-player-id="${change.playerId}"]`);
+    const layer = zone?.querySelector(".score-delta-layer");
+    if (!layer) continue;
+    const badge = document.createElement("div");
+    badge.className = "score-delta";
+    badge.textContent = `${change.delta > 0 ? "+" : ""}${change.delta}`;
+    layer.appendChild(badge);
+    setTimeout(() => badge.remove(), 950);
+  }
 }
 
 function renderDeckCard(clickable) {
@@ -1030,6 +1170,7 @@ $("#createRoomForm").addEventListener("submit", (event) => {
   const mode = document.querySelector("input[name='gameMode']:checked")?.value || "normal";
   const penaltyMultiplier = Number(document.querySelector("input[name='penaltyMultiplier']:checked")?.value || 1);
   const turnTime = Number(document.querySelector("input[name='turnTime']:checked")?.value || 6);
+  const aiDifficulty = $("#aiDifficultySelect")?.value || "intermediate";
   $("#createError").textContent = "";
 
   if (!title || title.length > 10) {
@@ -1045,7 +1186,7 @@ $("#createRoomForm").addEventListener("submit", (event) => {
     return;
   }
 
-  socket.emit("createRoom", { title, isPrivate, password, maxPlayers, aiCount, mode, penaltyMultiplier, turnTime });
+  socket.emit("createRoom", { title, isPrivate, password, maxPlayers, aiCount, mode, penaltyMultiplier, turnTime, aiDifficulty });
 });
 
 $("#privateRoomCheck").addEventListener("change", (event) => {
@@ -1090,6 +1231,9 @@ $("#addAIButton").addEventListener("click", () => {
   socket.emit("addAI");
 });
 $("#removeAIButton").addEventListener("click", () => socket.emit("removeAI"));
+$("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
+  socket.emit("setAIDifficulty", { aiDifficulty: event.target.value });
+});
 $("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
@@ -1217,13 +1361,23 @@ socket.on("bellResult", (payload) => {
   const ringerName = payload.bellRingerDisplayName || payload.bellRingerName;
   showBellLog(ringerName);
   if (payload.correct) playBellAnimation();
+  showScoreDeltas(payload.scoreChanges);
   const message = payload.correct ? `${ringerName} 정답!` : `${ringerName} 오답!`;
   showToast(message);
 });
 
 socket.on("timeoutResult", (payload) => {
   const name = payload.playerDisplayName || payload.playerName;
+  showScoreDeltas(payload.scoreChanges);
   showToast(`${name} 시간초과! -${payload.penalty}점`);
+});
+
+socket.on("latencyPong", (payload) => {
+  const startedAt = pendingLatencyPings.get(payload?.nonce);
+  if (!startedAt) return;
+  pendingLatencyPings.delete(payload.nonce);
+  state.latency = { value: Date.now() - startedAt, state: "ok" };
+  renderLatency();
 });
 
 socket.on("emoteEvent", (payload) => {
@@ -1263,6 +1417,7 @@ socket.on("reconnectResult", (payload) => {
 });
 
 socket.on("connect", () => {
+  startLatencyMonitor();
   if (state.nickname && state.activeScreen !== "nickname") {
     socket.emit("joinLobby", { nickname: state.nickname });
   }
@@ -1273,5 +1428,6 @@ applyBgmMode(getStoredBgmMode(), false);
 applyBgmVolume(getStoredBgmVolume());
 applySfxVolume(getStoredSfxVolume());
 setupBellImage();
+startLatencyMonitor();
 updateResponsiveSizes();
 showScreen("nickname");
