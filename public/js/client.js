@@ -72,7 +72,13 @@ function showScreen(name) {
     element.classList.toggle("hidden", screenName !== name);
   });
   state.activeScreen = name;
-  if (name !== "game") stopTurnTimer();
+  const gameHud = $("#gameHud");
+  if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
+  if (name !== "game") {
+    stopTurnTimer();
+    setText("#turnTimer", "--");
+    $("#turnTimer")?.classList.remove("urgent");
+  }
 }
 
 function showToast(message) {
@@ -170,6 +176,8 @@ const AUDIO_PRELOAD_URLS = [
 const bgm = new Audio();
 bgm.preload = "auto";
 const preloadedAudio = new Map();
+const preloadedImages = new Map();
+const imagePreloadPromises = new Map();
 let bgmIndex = 0;
 let currentBgmMode = "all";
 let userGestureSeen = false;
@@ -231,10 +239,43 @@ function applySfxVolume(value) {
   $("#sfxVolumeValue").textContent = String(volume);
 }
 
+function preloadImage(url) {
+  if (!url) return Promise.resolve(false);
+  const cached = preloadedImages.get(url);
+  if (cached?.loaded) return Promise.resolve(true);
+  if (imagePreloadPromises.has(url)) return imagePreloadPromises.get(url);
+
+  const img = new Image();
+  img.decoding = "async";
+  img.loading = "eager";
+  const promise = new Promise((resolve) => {
+    img.addEventListener("load", () => {
+      preloadedImages.set(url, { loaded: true, img });
+      resolve(true);
+    }, { once: true });
+    img.addEventListener("error", () => {
+      preloadedImages.set(url, { loaded: false, img: null });
+      resolve(false);
+    }, { once: true });
+  });
+  imagePreloadPromises.set(url, promise);
+  img.src = url;
+  return promise;
+}
+
+function isImagePreloaded(url) {
+  return preloadedImages.get(url)?.loaded === true;
+}
+
+function preloadCardImages(card) {
+  for (const item of card?.items || []) {
+    preloadImage(CHARACTER_ASSETS[item.characterId]);
+  }
+}
+
 function preloadAssets() {
   for (const url of IMAGE_PRELOAD_URLS) {
-    const img = new Image();
-    img.src = url;
+    preloadImage(url);
   }
 
   for (const url of AUDIO_PRELOAD_URLS) {
@@ -605,6 +646,76 @@ function updateResponsiveSizes() {
   root.style.setProperty("--deck-offset", `${deckOffset}px`);
 }
 
+function cardIdentity(card) {
+  return card?.cardId || card?.id || "";
+}
+
+function createPlayerZone(playerId) {
+  const zone = document.createElement("article");
+  zone.className = "player-zone";
+  zone.dataset.playerId = playerId;
+  zone.innerHTML = `
+    <header class="player-head">
+      <div class="player-name"></div>
+      <div class="score"></div>
+    </header>
+    <div class="card-stack">
+      <div class="deck-slot"></div>
+      <div class="pile-slot"></div>
+    </div>
+  `;
+  return zone;
+}
+
+function applyCardHighlight(cardElement, highlight = []) {
+  const highlighted = new Set(highlight);
+  for (const piece of cardElement.querySelectorAll(".character-piece")) {
+    piece.classList.toggle("highlighted", highlighted.has(piece.dataset.characterId));
+  }
+}
+
+function syncDeckCard(deckSlot, canFlip, visible) {
+  if (!visible) {
+    deckSlot.replaceChildren();
+    return;
+  }
+
+  let deck = deckSlot.querySelector(".deck-card");
+  if (!deck) {
+    deck = renderDeckCard(false);
+    deckSlot.replaceChildren(deck);
+  }
+  deck.classList.toggle("clickable", canFlip);
+  deck.disabled = !canFlip;
+  deck.onclick = canFlip ? () => socket.emit("flipCard") : null;
+}
+
+function syncPileCard(pileSlot, card, highlight) {
+  if (!card) {
+    const currentEmpty = pileSlot.querySelector(".empty-card-space");
+    if (!currentEmpty || pileSlot.children.length !== 1) {
+      pileSlot.replaceChildren(renderEmptyCardSpace());
+    }
+    return;
+  }
+
+  preloadCardImages(card);
+  const nextCardId = cardIdentity(card);
+  const currentCard = pileSlot.querySelector(".front-card");
+  if (!currentCard || currentCard.dataset.cardId !== nextCardId) {
+    pileSlot.replaceChildren(renderFrontCard(card, highlight));
+    return;
+  }
+  applyCardHighlight(currentCard, highlight);
+}
+
+function renderEmptyCardSpace() {
+  const space = document.createElement("div");
+  space.className = "empty-card-space";
+  space.setAttribute("aria-hidden", "true");
+  return space;
+}
+
 function renderGame(game) {
   state.game = game;
   state.room = null;
@@ -619,14 +730,19 @@ function renderGame(game) {
   const wrap = $("#gamePlayers");
   const playerCount = game.players.length;
   wrap.className = `game-players players-${playerCount}`;
-  wrap.innerHTML = "";
   const highlight = game.matchedCharacters || [];
+  const existingZones = new Map([...wrap.querySelectorAll(".player-zone")]
+    .map((zone) => [zone.dataset.playerId, zone]));
+  const seenPlayers = new Set();
 
   game.players.forEach((player, index) => {
     const seat = getSeatPosition(index, playerCount);
-    const zone = document.createElement("article");
-    zone.className = "player-zone";
-    zone.dataset.playerId = player.id;
+    let zone = existingZones.get(player.id);
+    if (!zone) {
+      zone = createPlayerZone(player.id);
+      wrap.appendChild(zone);
+    }
+    seenPlayers.add(player.id);
     zone.style.left = `${seat.left}%`;
     zone.style.top = `${seat.top}%`;
     zone.classList.toggle("current-turn", player.id === game.currentTurnPlayerId);
@@ -635,30 +751,19 @@ function renderGame(game) {
     const isSelf = player.id === game.selfPlayerId;
     const canFlip = isSelf && !player.spectator && player.id === game.currentTurnPlayerId && !game.bellLocked;
 
-    zone.innerHTML = `
-      <header class="player-head">
-        <div class="player-name">${renderName(player)}</div>
-        <div class="score">${player.score}</div>
-      </header>
-      <div class="card-stack">
-        <div class="deck-slot"></div>
-        <div class="pile-slot"></div>
-      </div>
-    `;
+    zone.querySelector(".player-name").innerHTML = renderName(player);
+    zone.querySelector(".score").textContent = player.score;
 
     const deckSlot = zone.querySelector(".deck-slot");
-    if (!player.spectator) {
-      const deck = renderDeckCard(canFlip);
-      if (canFlip) deck.addEventListener("click", () => socket.emit("flipCard"));
-      deckSlot.appendChild(deck);
-    }
+    syncDeckCard(deckSlot, canFlip, !player.spectator);
 
     const pileSlot = zone.querySelector(".pile-slot");
-    if (player.topCard) pileSlot.appendChild(renderFrontCard(player.topCard, highlight));
-    else pileSlot.innerHTML = `<div class="empty-card-space" aria-hidden="true"></div>`;
-
-    wrap.appendChild(zone);
+    syncPileCard(pileSlot, player.topCard, highlight);
   });
+
+  for (const [playerId, zone] of existingZones) {
+    if (!seenPlayers.has(playerId)) zone.remove();
+  }
 
   startTurnTimer(game);
   updateGameOverlay(game);
@@ -670,11 +775,20 @@ function renderDeckCard(clickable) {
   card.className = `deck-card ${clickable ? "clickable" : ""}`;
   card.disabled = !clickable;
   card.title = "카드덱";
-  card.innerHTML = `
-    <div class="deck-pattern" aria-hidden="true"></div>
-    <img alt="" aria-hidden="true" src="${CARD_BACK_ASSET}" />
-  `;
-  card.querySelector("img").addEventListener("error", (event) => {
+  const pattern = document.createElement("div");
+  pattern.className = "deck-pattern";
+  pattern.setAttribute("aria-hidden", "true");
+  const image = document.createElement("img");
+  image.alt = "";
+  image.setAttribute("aria-hidden", "true");
+  image.decoding = "async";
+  image.loading = "eager";
+  image.draggable = false;
+  image.width = 264;
+  image.height = 352;
+  image.src = CARD_BACK_ASSET;
+  card.replaceChildren(pattern, image);
+  image.addEventListener("error", (event) => {
     event.currentTarget.remove();
   });
   return card;
@@ -683,6 +797,7 @@ function renderDeckCard(clickable) {
 function renderFrontCard(card, highlight = []) {
   const element = document.createElement("div");
   element.className = "front-card";
+  element.dataset.cardId = cardIdentity(card);
   const firstCharacter = card.items?.[0]?.characterId || "nano";
   element.style.background = `linear-gradient(160deg, #fff, ${CARD_COLORS[firstCharacter] || "#edf7ff"})`;
 
@@ -691,19 +806,34 @@ function renderFrontCard(card, highlight = []) {
     const slot = CARD_SLOTS[item.slot] || CARD_SLOTS[3];
     const piece = document.createElement("div");
     piece.className = "character-piece";
+    piece.dataset.characterId = item.characterId;
     piece.classList.toggle("highlighted", highlight.includes(item.characterId));
     piece.style.left = slot.left;
     piece.style.top = slot.top;
     piece.style.width = CHARACTER_SIZE_BY_COUNT[total] || "34%";
     piece.style.height = CHARACTER_SIZE_BY_COUNT[total] || "34%";
-    piece.innerHTML = `
-      <div class="character-fallback" aria-hidden="true"></div>
-      <img alt="" aria-hidden="true" src="${CHARACTER_ASSETS[item.characterId]}" />
-    `;
-    piece.querySelector("img").addEventListener("load", () => {
+    const imageUrl = CHARACTER_ASSETS[item.characterId];
+    const fallback = document.createElement("div");
+    fallback.className = "character-fallback";
+    fallback.setAttribute("aria-hidden", "true");
+    const image = document.createElement("img");
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.decoding = "async";
+    image.loading = "eager";
+    image.draggable = false;
+    image.width = 256;
+    image.height = 256;
+    image.src = imageUrl;
+    piece.replaceChildren(fallback, image);
+    if (isImagePreloaded(imageUrl)) piece.classList.add("image-loaded");
+    preloadImage(imageUrl).then((loaded) => {
+      if (loaded) piece.classList.add("image-loaded");
+    });
+    image.addEventListener("load", () => {
       piece.classList.add("image-loaded");
     });
-    piece.querySelector("img").addEventListener("error", (event) => {
+    image.addEventListener("error", (event) => {
       event.currentTarget.remove();
     });
     element.appendChild(piece);

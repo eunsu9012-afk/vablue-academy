@@ -13,6 +13,12 @@
           <span class="brand-mark">BB</span>
           <span>베이블루 할리갈리 온라인</span>
         </div>
+        <div id="gameHud" class="game-hud hidden">
+          <span id="gameModeBadge" class="badge mode-badge">[일반]</span>
+          <span id="gameTurnLimitBadge" class="badge turn-limit-badge">턴 제한: 6초</span>
+          <strong id="turnTimer" class="turn-timer">--</strong>
+          <span id="gamePenaltyBadge" class="badge penalty-badge">[1배]</span>
+        </div>
         <button id="settingsButton" class="icon-button" type="button" title="설정">⚙</button>
         <section id="settingsPanel" class="settings-panel hidden" aria-label="설정 패널">
           <label class="settings-row">
@@ -157,12 +163,6 @@
 
         <section id="gameScreen" class="screen hidden game-screen">
           <div class="game-board">
-            <div class="game-hud">
-              <span id="gameModeBadge" class="badge mode-badge">[일반]</span>
-              <span id="gameTurnLimitBadge" class="badge turn-limit-badge">턴 제한: 6초</span>
-              <strong id="turnTimer" class="turn-timer">6.0</strong>
-              <span id="gamePenaltyBadge" class="badge penalty-badge">[1배]</span>
-            </div>
             <div id="bellLog" class="bell-log hidden"></div>
             <div id="gamePlayers" class="game-players"></div>
             <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">

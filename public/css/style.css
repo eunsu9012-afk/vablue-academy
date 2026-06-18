@@ -66,13 +66,15 @@ button {
   top: 14px;
   left: 20px;
   right: 20px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   pointer-events: none;
 }
 
 .brand {
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -99,6 +101,7 @@ button {
 }
 
 .icon-button {
+  justify-self: end;
   display: grid;
   place-items: center;
   width: 44px;
@@ -729,32 +732,30 @@ small {
 }
 
 .game-hud {
-  position: absolute;
+  justify-self: center;
   z-index: 7;
-  left: 50%;
-  top: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
   gap: calc(8px * var(--timer-scale));
-  max-width: calc(100vw - 40px);
-  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 210px));
   padding: calc(5px * var(--timer-scale)) calc(9px * var(--timer-scale));
   border: 2px solid rgba(255, 255, 255, 0.78);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 8px 20px rgba(66, 51, 94, 0.12);
+  pointer-events: none;
 }
 
 .turn-timer {
-  min-width: calc(70px * var(--timer-scale));
-  padding: calc(4px * var(--timer-scale)) calc(11px * var(--timer-scale));
+  min-width: calc(62px * var(--timer-scale));
+  padding: calc(4px * var(--timer-scale)) calc(10px * var(--timer-scale));
   border-radius: 999px;
   background: #2f2a40;
   color: #eafcff;
   font-family: "Consolas", "D2Coding", monospace;
-  font-size: calc(28px * var(--timer-scale));
+  font-size: calc(24px * var(--timer-scale));
   line-height: 1;
   text-align: center;
   letter-spacing: 0;
@@ -782,7 +783,7 @@ small {
   background: rgba(255, 255, 255, 0.58);
   box-shadow: 0 10px 22px rgba(71, 58, 104, 0.08);
   pointer-events: auto;
-  transition: box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+  transition: box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
 .player-zone.current-turn {
@@ -892,6 +893,7 @@ small {
   width: var(--open-card-width);
   height: var(--open-card-height);
   border: 3px solid rgba(255, 255, 255, 0.92);
+  contain: layout paint;
 }
 
 .empty-card-space {
@@ -952,8 +954,9 @@ small {
 }
 
 .character-piece img {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   filter: drop-shadow(0 5px 4px rgba(45, 37, 61, 0.22));
 }
@@ -1263,6 +1266,26 @@ small {
 @media (max-width: 900px), (max-height: 620px) {
   .topbar {
     position: absolute;
+    left: 12px;
+    right: 12px;
+    gap: 8px;
+  }
+
+  .game-hud {
+    max-width: calc(100vw - 132px);
+    gap: 5px;
+    padding: 4px 6px;
+  }
+
+  .game-hud .badge {
+    min-height: 21px;
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+
+  .turn-timer {
+    min-width: 54px;
+    font-size: 20px;
   }
 
   .screen {

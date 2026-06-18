@@ -29,6 +29,9 @@ const CARD_TOTAL_WEIGHTS = [
   { count: 4, weight: 15 },
   { count: 5, weight: 5 },
 ];
+const AI_CORRECT_MISS_PROBABILITY = 0.1;
+const AI_WRONG_BELL_PROBABILITY = 0.003;
+const AI_MIN_BELL_REACTION_MS = 550;
 const EMOTES = {
   "1": "웃음",
   "2": "조롱",
@@ -457,6 +460,10 @@ function serializeRoom(room, selfPlayerId = null) {
   };
 }
 
+function serializeCard(card) {
+  return card ? deepClone(card) : null;
+}
+
 function serializeGame(room, selfPlayerId = null) {
   const game = room.game;
   return {
@@ -487,7 +494,7 @@ function serializeGame(room, selfPlayerId = null) {
       score: player.score,
       deckCount: player.spectator ? 0 : (player.deck?.length || PRIVATE_DECK_SIZE),
       faceUpCount: player.faceUpCards?.length || 0,
-      topCard: player.faceUpCards?.[player.faceUpCards.length - 1] || null,
+      topCard: serializeCard(player.faceUpCards?.[player.faceUpCards.length - 1] || null),
       eliminated: player.eliminated,
       spectator: player.spectator,
     })),
@@ -799,16 +806,52 @@ function pickDistinctCharacters(count) {
   return shuffle(CHARACTER_IDS).slice(0, count);
 }
 
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object") return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object" && !Object.isFrozen(child)) deepFreeze(child);
+  }
+  return value;
+}
+
+function createCard(type, items, counts) {
+  const sequence = cardSequence++;
+  const cardId = `card_${sequence}`;
+  return deepFreeze({
+    id: cardId,
+    cardId,
+    sequence,
+    type,
+    items: items.map((item) => ({
+      characterId: item.characterId,
+      slot: item.slot,
+    })),
+    counts: { ...counts },
+  });
+}
+
+function cloneCardForOpenPile(card) {
+  return deepFreeze(deepClone(card));
+}
+
+function createDeck(room) {
+  return Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+}
+
 function generateSingleCharacterCard() {
   const characterId = CHARACTER_IDS[randomInt(0, CHARACTER_IDS.length - 1)];
   const totalCount = pickCardTotalCount();
   const slots = shuffle([1, 2, 3, 4, 5]).slice(0, totalCount);
-  return {
-    id: `card_${cardSequence++}`,
-    type: "single",
-    items: slots.map((slot) => ({ characterId, slot })),
-    counts: { [characterId]: totalCount },
-  };
+  return createCard(
+    "single",
+    slots.map((slot) => ({ characterId, slot })),
+    { [characterId]: totalCount },
+  );
 }
 
 // Server-side card generation is the fairness boundary for every round.
@@ -836,12 +879,7 @@ function generateRandomCard(mode = "normal") {
     }
   }
 
-  return {
-    id: `card_${cardSequence++}`,
-    type,
-    items: shuffle(items),
-    counts,
-  };
+  return createCard(type, shuffle(items), counts);
 }
 
 function topCards(room) {
@@ -864,6 +902,60 @@ function evaluateBell(room) {
     correct: matchedCharacters.length > 0,
     matchedCharacters,
     totals,
+  };
+}
+
+function cardFingerprint(card) {
+  return JSON.stringify({
+    cardId: card.cardId || card.id,
+    sequence: card.sequence,
+    items: card.items,
+    counts: card.counts,
+  });
+}
+
+function verifyOpenPileStability(room, newestCardId) {
+  if (!room?.game) return;
+  if (!room.game.openPileFingerprints) room.game.openPileFingerprints = {};
+
+  for (const player of room.players) {
+    for (const card of player.faceUpCards || []) {
+      const cardId = card.cardId || card.id;
+      const key = `${player.id}:${cardId}`;
+      const fingerprint = cardFingerprint(card);
+      const previous = room.game.openPileFingerprints[key];
+      if (!previous) {
+        room.game.openPileFingerprints[key] = fingerprint;
+        continue;
+      }
+      if (previous !== fingerprint) {
+        logEvent("OpenPile changed", `player=${player.nickname} cardId=${cardId}`);
+        continue;
+      }
+      if (cardId !== newestCardId) {
+        logEvent("OpenPile stable", `player=${player.nickname} cardId=${cardId}`);
+      }
+    }
+  }
+}
+
+function analyzeAIMistakeRisk(room, verdict) {
+  const cards = topCards(room);
+  const counts = Object.values(verdict.totals).map((value) => Number(value || 0));
+  const totalVisibleItems = cards.reduce((sum, card) => sum + (card.items?.length || 0), 0);
+  const complexCards = cards.filter((card) => (card.items?.length || 0) >= 3).length;
+  const recentOpenAge = Date.now() - (room.game?.lastCardOpenedAt || 0);
+  const reasons = [];
+
+  if (counts.some((count) => count === 4)) reasons.push("near-five");
+  if (counts.some((count) => count >= 6)) reasons.push("over-five");
+  if (room.mode === "hard" && complexCards >= 2) reasons.push("hard-complex");
+  if (totalVisibleItems >= 12 || (cards.length >= 4 && totalVisibleItems >= 10)) reasons.push("crowded-table");
+  if (recentOpenAge >= 0 && recentOpenAge <= 650) reasons.push("recent-open");
+
+  return {
+    allowed: reasons.includes("recent-open") && reasons.some((reason) => reason !== "recent-open"),
+    reasons,
   };
 }
 
@@ -894,6 +986,7 @@ function clearRoundCards(room) {
     if (player.spectator) player.deckCount = 0;
     else player.deckCount = player.deck?.length || PRIVATE_DECK_SIZE;
   }
+  if (room.game) room.game.openPileFingerprints = {};
 }
 
 function getWinner(room) {
@@ -1013,12 +1106,13 @@ function beginGame(room) {
   for (const player of room.players) {
     player.ready = player.isAI ? true : player.ready;
     player.score = 100;
-    player.deck = Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+    player.deck = createDeck(room);
     player.deckCount = player.deck.length;
     player.faceUpCards = [];
     player.eliminated = false;
     player.spectator = false;
     player.connected = true;
+    logEvent("deck initialized", `player=${player.nickname} cardIds=[${player.deck.map((card) => card.cardId).join(",")}]`);
   }
 
   const activePlayers = getActivePlayers(room);
@@ -1034,6 +1128,9 @@ function beginGame(room) {
     tableVersion: 0,
     aiBellScheduledForVersion: -1,
     aiTimers: [],
+    openPileFingerprints: {},
+    lastCardOpenedAt: 0,
+    lastOpenedCardId: null,
     resultVisible: false,
     resultTimer: null,
     roundTimer: null,
@@ -1053,15 +1150,23 @@ function handleFlipCard(room, player) {
   if (room.game.currentTurnPlayerId !== player.id) return false;
 
   if (!Array.isArray(player.deck) || player.deck.length === 0) {
-    player.deck = Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+    player.deck = createDeck(room);
   }
-  const card = player.deck.shift();
-  player.faceUpCards.push(card);
-  player.deck.push(generateRandomCard(room.mode));
+  const deckCard = player.deck.shift();
+  const openedCard = cloneCardForOpenPile(deckCard);
+  player.faceUpCards.push(openedCard);
+  const replacementCard = generateRandomCard(room.mode);
+  player.deck.push(replacementCard);
   player.deckCount = player.deck.length;
+  room.game.lastCardOpenedAt = Date.now();
+  room.game.lastOpenedCardId = openedCard.cardId;
   room.game.tableVersion += 1;
   setCurrentTurn(room, nextAlivePlayerId(room, player.id));
-  logEvent("Card flipped", `${player.nickname} / ${room.title}`);
+  logEvent(
+    "flip",
+    `player=${player.nickname} openedCardId=${openedCard.cardId} replacementCardId=${replacementCard.cardId} deckSize=${player.deck.length} counts=${JSON.stringify(openedCard.counts)}`,
+  );
+  verifyOpenPileStability(room, openedCard.cardId);
   emitGameState(room);
   scheduleAI(room);
   return true;
@@ -1229,14 +1334,21 @@ function scheduleAIBell(room) {
   room.game.aiBellScheduledForVersion = room.game.tableVersion;
 
   const verdict = evaluateBell(room);
+  const mistakeRisk = analyzeAIMistakeRisk(room, verdict);
   const aiPlayers = getActivePlayers(room).filter((player) => player.isAI);
   for (const ai of aiPlayers) {
-    if (verdict.correct && Math.random() < 0.1) continue;
-    if (!verdict.correct && Math.random() >= 0.03) continue;
+    if (verdict.correct && Math.random() < AI_CORRECT_MISS_PROBABILITY) continue;
+    if (!verdict.correct) {
+      if (!mistakeRisk.allowed) continue;
+      if (Math.random() >= AI_WRONG_BELL_PROBABILITY) continue;
+    }
 
-    const delay = randomInt(500, verdict.correct ? 1800 : 2200);
+    const delay = randomInt(verdict.correct ? AI_MIN_BELL_REACTION_MS : 700, verdict.correct ? 1800 : 2200);
     const aiId = ai.id;
     const tableVersion = room.game.tableVersion;
+    if (!verdict.correct) {
+      logEvent("AI mistake scheduled", `player=${ai.nickname} reasons=[${mistakeRisk.reasons.join(",")}] delay=${delay}ms`);
+    }
     const timer = setTimeout(() => {
       const liveRoom = rooms.get(room.id);
       if (!liveRoom?.game || liveRoom.status !== "playing") return;
