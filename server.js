@@ -21,6 +21,14 @@ const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
 const BASE_PENALTY = 5;
+const PRIVATE_DECK_SIZE = 5;
+const CARD_TOTAL_WEIGHTS = [
+  { count: 1, weight: 20 },
+  { count: 2, weight: 30 },
+  { count: 3, weight: 30 },
+  { count: 4, weight: 15 },
+  { count: 5, weight: 5 },
+];
 const EMOTES = {
   "1": "웃음",
   "2": "조롱",
@@ -36,6 +44,9 @@ let roomSequence = 1;
 let playerSequence = 1;
 let cardSequence = 1;
 let userdata = { users: {} };
+let userdataDirty = false;
+let userdataWriting = false;
+let userdataWriteAgain = false;
 
 function logEvent(label, detail = "") {
   console.log(`[${new Date().toISOString()}] ${label}${detail ? ` - ${detail}` : ""}`);
@@ -59,17 +70,77 @@ function normalizeStatRecord(record = {}) {
   };
 }
 
-function saveUserdata() {
-  const tempPath = `${USERDATA_PATH}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(userdata, null, 2)}\n`, "utf8");
-  fs.renameSync(tempPath, USERDATA_PATH);
+function markUserdataDirty() {
+  userdataDirty = true;
 }
+
+async function flushUserdata(force = false) {
+  if (!force && !userdataDirty) return;
+  if (userdataWriting) {
+    userdataWriteAgain = true;
+    if (force) {
+      while (userdataWriting) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      await flushUserdata(true);
+    }
+    return;
+  }
+
+  userdataWriting = true;
+  userdataDirty = false;
+  const tempPath = `${USERDATA_PATH}.tmp`;
+  try {
+    await fs.promises.writeFile(tempPath, `${JSON.stringify(userdata, null, 2)}\n`, "utf8");
+    await fs.promises.rename(tempPath, USERDATA_PATH);
+  } catch (err) {
+    userdataDirty = true;
+    console.error("Failed to save userdata.json", err);
+  } finally {
+    userdataWriting = false;
+    if (userdataWriteAgain) {
+      userdataWriteAgain = false;
+      await flushUserdata(force);
+    }
+  }
+}
+
+function saveUserdata() {
+  markUserdataDirty();
+}
+
+const userdataFlushInterval = setInterval(() => {
+  flushUserdata().catch((err) => console.error("Failed to flush userdata.json", err));
+}, 5000);
+userdataFlushInterval.unref();
+
+async function shutdown(signal) {
+  logEvent("Shutdown", signal);
+  clearInterval(userdataFlushInterval);
+  await flushUserdata(true);
+  process.exit(0);
+}
+
+process.once("SIGINT", () => {
+  shutdown("SIGINT").catch((err) => {
+    console.error("Failed during SIGINT shutdown", err);
+    process.exit(1);
+  });
+});
+
+process.once("SIGTERM", () => {
+  shutdown("SIGTERM").catch((err) => {
+    console.error("Failed during SIGTERM shutdown", err);
+    process.exit(1);
+  });
+});
 
 async function initUserdata() {
   const existed = fs.existsSync(USERDATA_PATH);
   if (!existed) {
     userdata = { users: {} };
     saveUserdata();
+    await flushUserdata(true);
     logEvent("userdata created", "userdata.json");
     return;
   }
@@ -82,12 +153,14 @@ async function initUserdata() {
       userdata.users[nickname] = normalizeStatRecord(record);
     }
     saveUserdata();
+    await flushUserdata(true);
     logEvent("userdata ready", "userdata.json");
   } catch (err) {
     const backupPath = `${USERDATA_PATH}.broken-${Date.now()}`;
     fs.copyFileSync(USERDATA_PATH, backupPath);
     userdata = { users: {} };
     saveUserdata();
+    await flushUserdata(true);
     logEvent("userdata recreated", `invalid JSON backed up to ${path.basename(backupPath)}`);
   }
 }
@@ -219,7 +292,8 @@ function createHumanPlayer(user, isHost = false) {
     isHost,
     joinedAt: Date.now(),
     score: 100,
-    deckCount: 20,
+    deck: [],
+    deckCount: PRIVATE_DECK_SIZE,
     faceUpCards: [],
     eliminated: false,
     spectator: false,
@@ -243,7 +317,8 @@ function createAIPlayer(room) {
     isHost: false,
     joinedAt: Date.now(),
     score: 100,
-    deckCount: 20,
+    deck: [],
+    deckCount: PRIVATE_DECK_SIZE,
     faceUpCards: [],
     eliminated: false,
     spectator: false,
@@ -339,7 +414,13 @@ async function makeLobbyPayload(nickname) {
 }
 
 async function emitLobbyState(targetSocket = null) {
-  const sockets = targetSocket ? [targetSocket] : [...io.sockets.sockets.values()];
+  const sockets = targetSocket
+    ? [targetSocket]
+    : [...io.sockets.sockets.values()].filter((socket) => {
+        const nickname = socket.data.nickname;
+        const user = nickname ? usersByNickname.get(nickname) : null;
+        return Boolean(user?.connected && !user.roomId);
+      });
   for (const socket of sockets) {
     const nickname = socket.data.nickname;
     if (!nickname) continue;
@@ -404,7 +485,7 @@ function serializeGame(room, selfPlayerId = null) {
       isHost: player.id === room.hostId,
       connected: player.connected,
       score: player.score,
-      deckCount: player.spectator ? 0 : 20,
+      deckCount: player.spectator ? 0 : (player.deck?.length || PRIVATE_DECK_SIZE),
       faceUpCount: player.faceUpCards?.length || 0,
       topCard: player.faceUpCards?.[player.faceUpCards.length - 1] || null,
       eliminated: player.eliminated,
@@ -432,6 +513,11 @@ function canStartGame(room) {
   const total = room.players.length;
   if (total < 2 || total > 6) return false;
   return getHumanPlayers(room).every((player) => player.ready);
+}
+
+function areAllHumanPlayersReady(room) {
+  const humans = getHumanPlayers(room);
+  return humans.length > 0 && humans.every((player) => player.ready);
 }
 
 function getCurrentUser(socket) {
@@ -577,7 +663,8 @@ function removeHumanFromRoom(room, player, reason = "leave") {
   room.players = room.players.filter((entry) => entry.id !== player.id);
   logEvent("Room leave", `${player.nickname} / ${room.title} / ${reason}`);
   if (getHumanPlayers(room).length === 0) {
-    deleteRoom(room.id, "no humans");
+    if (room.status === "playing") finishAIOnlyRoom(room, "AI only");
+    else deleteRoom(room.id, "no humans");
     return;
   }
   transferHostIfNeeded(room);
@@ -600,6 +687,17 @@ function detachGamePlayerToLobby(socket, room, player, reason = "leave game", em
   }
   logEvent("Room leave", `${player.nickname} / ${room.title} / ${reason}`);
   if (emitLobby) emitLobbyState(liveSocket || null);
+}
+
+function finishAIOnlyRoom(room, reason = "AI only") {
+  if (!room) return;
+  const aiWinner = getActivePlayers(room).find((player) => player.isAI)
+    || room.players.find((player) => player.isAI);
+  room.statsEnabled = false;
+  room.status = "finished";
+  if (room.game) room.game.resultVisible = true;
+  if (aiWinner) logEvent("AI winner", `${aiWinner.nickname} / ${room.title}`);
+  deleteRoom(room.id, reason);
 }
 
 async function recordLeaveLoss(room, player) {
@@ -625,7 +723,7 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
   room.players = room.players.filter((entry) => entry.id !== player.id);
 
   if (getHumanPlayers(room).length === 0) {
-    deleteRoom(room.id, "AI only");
+    finishAIOnlyRoom(room, "AI only");
     return;
   }
 
@@ -649,15 +747,43 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
 
 function clearRoomTimers(room) {
   if (!room?.game) return;
-  for (const timer of room.game.aiTimers) clearTimeout(timer);
+  for (const timer of room.game.aiTimers) {
+    clearTimeout(timer);
+    clearInterval(timer);
+  }
   room.game.aiTimers = [];
   if (room.game.resultTimer) clearTimeout(room.game.resultTimer);
   if (room.game.turnTimer) clearTimeout(room.game.turnTimer);
+  if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
+  room.game.resultTimer = null;
   room.game.turnTimer = null;
+  room.game.roundTimer = null;
 }
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pickWeighted(options) {
+  const totalWeight = options.reduce((sum, option) => sum + option.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const option of options) {
+    roll -= option.weight;
+    if (roll < 0) return option.value ?? option.count;
+  }
+  const fallback = options[options.length - 1];
+  return fallback.value ?? fallback.count;
+}
+
+function pickCardTotalCount() {
+  return pickWeighted(CARD_TOTAL_WEIGHTS);
+}
+
+function pickHardCharacterCount(totalCount) {
+  const options = [{ value: 1, weight: 7 }];
+  if (totalCount >= 2) options.push({ value: 2, weight: 2 });
+  if (totalCount >= 3) options.push({ value: 3, weight: 1 });
+  return pickWeighted(options);
 }
 
 function shuffle(values) {
@@ -675,7 +801,7 @@ function pickDistinctCharacters(count) {
 
 function generateSingleCharacterCard() {
   const characterId = CHARACTER_IDS[randomInt(0, CHARACTER_IDS.length - 1)];
-  const totalCount = randomInt(1, 5);
+  const totalCount = pickCardTotalCount();
   const slots = shuffle([1, 2, 3, 4, 5]).slice(0, totalCount);
   return {
     id: `card_${cardSequence++}`,
@@ -689,10 +815,9 @@ function generateSingleCharacterCard() {
 function generateRandomCard(mode = "normal") {
   if (mode === "normal") return generateSingleCharacterCard();
 
-  const roll = Math.random();
-  const type = roll < 0.7 ? "single" : roll < 0.9 ? "double" : "triple";
-  const characterCount = type === "single" ? 1 : type === "double" ? 2 : 3;
-  const totalCount = randomInt(characterCount, 5);
+  const totalCount = pickCardTotalCount();
+  const characterCount = pickHardCharacterCount(totalCount);
+  const type = characterCount === 1 ? "single" : characterCount === 2 ? "double" : "triple";
   const selectedCharacters = pickDistinctCharacters(characterCount);
   const counts = Object.fromEntries(selectedCharacters.map((characterId) => [characterId, 1]));
 
@@ -767,6 +892,7 @@ function clearRoundCards(room) {
   for (const player of room.players) {
     player.faceUpCards = [];
     if (player.spectator) player.deckCount = 0;
+    else player.deckCount = player.deck?.length || PRIVATE_DECK_SIZE;
   }
 }
 
@@ -848,6 +974,7 @@ async function finishGame(room, winner) {
     }
     room.players = room.players.filter((player) => !winningHumans.some((winnerPlayer) => winnerPlayer.id === player.id));
     if (getHumanPlayers(room).filter((player) => getSocketById(player.socketId)).length === 0) {
+      clearRoomTimers(room);
       rooms.delete(room.id);
     } else {
       emitGameState(room);
@@ -886,7 +1013,8 @@ function beginGame(room) {
   for (const player of room.players) {
     player.ready = player.isAI ? true : player.ready;
     player.score = 100;
-    player.deckCount = 20;
+    player.deck = Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+    player.deckCount = player.deck.length;
     player.faceUpCards = [];
     player.eliminated = false;
     player.spectator = false;
@@ -908,6 +1036,7 @@ function beginGame(room) {
     aiTimers: [],
     resultVisible: false,
     resultTimer: null,
+    roundTimer: null,
   };
   setCurrentTurn(room, activePlayers[randomInt(0, activePlayers.length - 1)].id);
 
@@ -923,9 +1052,13 @@ function handleFlipCard(room, player) {
   if (!player || player.spectator || player.eliminated) return false;
   if (room.game.currentTurnPlayerId !== player.id) return false;
 
-  const card = generateRandomCard(room.mode);
+  if (!Array.isArray(player.deck) || player.deck.length === 0) {
+    player.deck = Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+  }
+  const card = player.deck.shift();
   player.faceUpCards.push(card);
-  player.deckCount = 20;
+  player.deck.push(generateRandomCard(room.mode));
+  player.deckCount = player.deck.length;
   room.game.tableVersion += 1;
   setCurrentTurn(room, nextAlivePlayerId(room, player.id));
   logEvent("Card flipped", `${player.nickname} / ${room.title}`);
@@ -987,24 +1120,27 @@ function handleBell(room, bellRinger) {
   });
   emitGameState(room);
 
-  setTimeout(async () => {
-    if (!rooms.has(room.id) || room.status !== "playing") return;
-    clearRoundCards(room);
-    room.game.matchedCharacters = [];
-    room.game.wrongFlash = false;
-    room.game.bellLocked = false;
-    room.game.tableVersion += 1;
+  if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
+  room.game.roundTimer = setTimeout(async () => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom?.game || liveRoom.status !== "playing") return;
+    liveRoom.game.roundTimer = null;
+    clearRoundCards(liveRoom);
+    liveRoom.game.matchedCharacters = [];
+    liveRoom.game.wrongFlash = false;
+    liveRoom.game.bellLocked = false;
+    liveRoom.game.tableVersion += 1;
 
     if (winner) {
-      await finishGame(room, winner);
+      await finishGame(liveRoom, winner);
       return;
     }
 
-    setCurrentTurn(room, bellRinger.spectator
-      ? nextAlivePlayerId(room, bellRinger.id)
+    setCurrentTurn(liveRoom, bellRinger.spectator
+      ? nextAlivePlayerId(liveRoom, bellRinger.id)
       : bellRinger.id);
-    emitGameState(room);
-    scheduleAI(room);
+    emitGameState(liveRoom);
+    scheduleAI(liveRoom);
   }, 1000);
 }
 
@@ -1038,21 +1174,24 @@ function handleTurnTimeout(room, playerId) {
   });
   emitGameState(room);
 
-  setTimeout(async () => {
-    if (!rooms.has(room.id) || room.status !== "playing") return;
-    clearRoundCards(room);
-    room.game.wrongFlash = false;
-    room.game.bellLocked = false;
-    room.game.tableVersion += 1;
+  if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
+  room.game.roundTimer = setTimeout(async () => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom?.game || liveRoom.status !== "playing") return;
+    liveRoom.game.roundTimer = null;
+    clearRoundCards(liveRoom);
+    liveRoom.game.wrongFlash = false;
+    liveRoom.game.bellLocked = false;
+    liveRoom.game.tableVersion += 1;
 
     if (winner) {
-      await finishGame(room, winner);
+      await finishGame(liveRoom, winner);
       return;
     }
 
-    setCurrentTurn(room, player.spectator ? nextAlivePlayerId(room, player.id) : player.id);
-    emitGameState(room);
-    scheduleAI(room);
+    setCurrentTurn(liveRoom, player.spectator ? nextAlivePlayerId(liveRoom, player.id) : player.id);
+    emitGameState(liveRoom);
+    scheduleAI(liveRoom);
   }, 1000);
 }
 
@@ -1137,6 +1276,7 @@ function joinRoomInternal(socket, room) {
 
 function addAIToRoom(room) {
   if (room.status !== "waiting" || room.players.length >= room.maxPlayers) return false;
+  if (areAllHumanPlayersReady(room)) return false;
   const ai = createAIPlayer(room);
   room.players.push(ai);
   logEvent("AI added", `${ai.nickname} / ${room.title}`);
@@ -1266,7 +1406,7 @@ io.on("connection", (socket) => {
       socket.emit("errorMessage", "방 제목은 1~10자로 입력해 주세요.");
       return;
     }
-    if (![1, 2, 3, 4, 5, 6].includes(max)) {
+    if (![2, 3, 4, 5, 6].includes(max)) {
       socket.emit("errorMessage", "최대 인원을 선택해 주세요.");
       return;
     }
@@ -1376,7 +1516,13 @@ io.on("connection", (socket) => {
 
     if (room.status === "playing" && player.spectator) {
       detachGamePlayerToLobby(socket, room, player, "spectator leave");
+      room.players = room.players.filter((entry) => entry.id !== player.id);
+      if (getHumanPlayers(room).length === 0) {
+        finishAIOnlyRoom(room, "AI only");
+        return;
+      }
       emitGameState(room);
+      emitLobbyState();
       return;
     }
 
@@ -1395,6 +1541,10 @@ io.on("connection", (socket) => {
   socket.on("addAI", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
+    if (areAllHumanPlayersReady(room)) {
+      socket.emit("errorMessage", "모든 인간 플레이어가 준비 완료되어 AI를 추가할 수 없습니다.");
+      return;
+    }
     if (!addAIToRoom(room)) socket.emit("errorMessage", "AI를 더 추가할 수 없습니다.");
     emitRoomState(room);
     emitLobbyState();

@@ -13,7 +13,10 @@ const CARD_BACK_ASSET = "/assets/cards/back.png";
 const VICTORY_SOUND_ASSET = "/assets/sounds/victory.mp3";
 const BELL_SOUND_ASSET = "/assets/sounds/bell.mp3";
 const BELL_IMAGE_ASSET = "/assets/bell/bell.png";
+const BELL_IMAGE_VERSION = "2";
+const BELL_IMAGE_URL = `${BELL_IMAGE_ASSET}?v=${BELL_IMAGE_VERSION}`;
 const HIDDEN_USERS_KEY = "babyblue-hidden-users";
+const BGM_MODE_KEY = "bgmMode";
 
 const CARD_SLOTS = {
   1: { left: "22%", top: "22%" },
@@ -54,12 +57,15 @@ const state = {
   passwordRoomId: null,
   gameResult: null,
   onlineUsersExpanded: false,
+  spectatorOverlayDismissedFor: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
 
 let victoryPlayedForResult = false;
 let turnTimerInterval = null;
+let bellLogTimer = null;
+let bellAnimationTimer = null;
 
 function showScreen(name) {
   Object.entries(screens).forEach(([screenName, element]) => {
@@ -75,6 +81,24 @@ function showToast(message) {
   toast.classList.remove("hidden");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.add("hidden"), 2200);
+}
+
+function hasFinalConsonant(text) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  const code = value.charCodeAt(value.length - 1);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
+}
+
+function showBellLog(name) {
+  const log = $("#bellLog");
+  if (!log) return;
+  const display = name || "\ub204\uad70\uac00";
+  const particle = hasFinalConsonant(display) ? "\uc774" : "\uac00";
+  log.textContent = `${display}${particle} \uc885\uc744 \ucce4\uc2b5\ub2c8\ub2e4`;
+  log.classList.remove("hidden");
+  clearTimeout(bellLogTimer);
+  bellLogTimer = setTimeout(() => log.classList.add("hidden"), 1000);
 }
 
 function setText(selector, text) {
@@ -118,35 +142,115 @@ function penaltyLabel(value) {
 }
 
 // BGM is intentionally resilient: missing files are skipped and the app stays silent.
-const bgmTracks = [
-  "/assets/sounds/bgm1.mp3",
-  "/assets/sounds/bgm2.mp3",
-  "/assets/sounds/bgm3.mp3",
-  "/assets/sounds/bgm4.mp3",
+const BGM_PLAYLISTS = {
+  energetic: [
+    "/assets/sounds/bgm1.mp3",
+    "/assets/sounds/bgm2.mp3",
+    "/assets/sounds/bgm3.mp3",
+    "/assets/sounds/bgm4.mp3",
+  ],
+  calm: [
+    "/assets/sounds/track1.mp3",
+    "/assets/sounds/track2.mp3",
+    "/assets/sounds/track3.mp3",
+  ],
+};
+BGM_PLAYLISTS.all = [...BGM_PLAYLISTS.energetic, ...BGM_PLAYLISTS.calm];
+const BGM_MODES = new Set(["all", "energetic", "calm"]);
+const IMAGE_PRELOAD_URLS = [
+  ...Object.values(CHARACTER_ASSETS),
+  CARD_BACK_ASSET,
+  BELL_IMAGE_URL,
+];
+const AUDIO_PRELOAD_URLS = [
+  ...BGM_PLAYLISTS.all,
+  BELL_SOUND_ASSET,
+  VICTORY_SOUND_ASSET,
 ];
 const bgm = new Audio();
+bgm.preload = "auto";
+const preloadedAudio = new Map();
 let bgmIndex = 0;
+let currentBgmMode = "all";
 let userGestureSeen = false;
 let bgmStarted = false;
 let skippedTracks = 0;
 let bgmSilent = false;
 
-function getStoredVolume() {
-  const stored = Number(localStorage.getItem("babyblue-bgm-volume"));
-  return Number.isFinite(stored) ? Math.min(10, Math.max(0, stored)) : 5;
+function clampVolumeStep(value, fallback = 3) {
+  const volume = Number(value);
+  if (!Number.isFinite(volume)) return fallback;
+  const normalized = volume > 5 ? Math.round(volume / 20) : Math.round(volume);
+  return Math.min(5, Math.max(1, normalized));
 }
 
-function applyVolume(value) {
-  const volume = Math.min(10, Math.max(0, Number(value)));
-  bgm.volume = volume / 10;
-  localStorage.setItem("babyblue-bgm-volume", String(volume));
-  $("#volumeSlider").value = String(volume);
-  $("#volumeValue").textContent = String(volume);
+function getStoredBgmVolume() {
+  return clampVolumeStep(localStorage.getItem("bgmVolume"), 3);
+}
+
+function getStoredBgmMode() {
+  const mode = localStorage.getItem(BGM_MODE_KEY);
+  return BGM_MODES.has(mode) ? mode : "all";
+}
+
+function getStoredSfxVolume() {
+  return clampVolumeStep(localStorage.getItem("sfxVolume"), 3);
+}
+
+function getCurrentBgmTracks() {
+  return BGM_PLAYLISTS[currentBgmMode] || BGM_PLAYLISTS.all;
+}
+
+function applyBgmMode(value, restart = true) {
+  currentBgmMode = BGM_MODES.has(value) ? value : "all";
+  localStorage.setItem(BGM_MODE_KEY, currentBgmMode);
+  const select = $("#bgmModeSelect");
+  if (select) select.value = currentBgmMode;
+
+  bgm.pause();
+  bgmIndex = 0;
+  skippedTracks = 0;
+  bgmSilent = false;
+  bgmStarted = false;
+
+  if (restart) startBgmWhenAllowed();
+}
+
+function applyBgmVolume(value) {
+  const volume = clampVolumeStep(value, 3);
+  bgm.volume = volume / 5;
+  localStorage.setItem("bgmVolume", String(volume));
+  $("#bgmVolumeSlider").value = String(volume);
+  $("#bgmVolumeValue").textContent = String(volume);
+}
+
+function applySfxVolume(value) {
+  const volume = clampVolumeStep(value, 3);
+  localStorage.setItem("sfxVolume", String(volume));
+  $("#sfxVolumeSlider").value = String(volume);
+  $("#sfxVolumeValue").textContent = String(volume);
+}
+
+function preloadAssets() {
+  for (const url of IMAGE_PRELOAD_URLS) {
+    const img = new Image();
+    img.src = url;
+  }
+
+  for (const url of AUDIO_PRELOAD_URLS) {
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = url;
+    audio.load();
+    preloadedAudio.set(url, audio);
+  }
 }
 
 function playBgmTrack() {
   if (!userGestureSeen || bgmSilent) return;
-  bgm.src = bgmTracks[bgmIndex];
+  const tracks = getCurrentBgmTracks();
+  if (!tracks.length) return;
+  bgm.src = tracks[bgmIndex % tracks.length];
   bgm.play().then(() => {
     bgmStarted = true;
     skippedTracks = 0;
@@ -161,13 +265,16 @@ function startBgmWhenAllowed() {
 }
 
 function playNextBgmTrack() {
-  bgmIndex = (bgmIndex + 1) % bgmTracks.length;
+  const tracks = getCurrentBgmTracks();
+  if (!tracks.length) return;
+  bgmIndex = (bgmIndex + 1) % tracks.length;
   playBgmTrack();
 }
 
 function playSound(src) {
-  const audio = new Audio(src);
-  audio.volume = bgm.volume;
+  const cached = preloadedAudio.get(src);
+  const audio = cached ? cached.cloneNode(true) : new Audio(src);
+  audio.volume = getStoredSfxVolume() / 5;
   audio.play().catch(() => {
     // Missing files and browser autoplay restrictions should not break gameplay.
   });
@@ -181,14 +288,26 @@ function playBellSound() {
   playSound(BELL_SOUND_ASSET);
 }
 
+function playBellAnimation() {
+  const button = $("#bellButton");
+  if (!button) return;
+  button.classList.remove("bell-pop");
+  void button.offsetWidth;
+  button.classList.add("bell-pop");
+  clearTimeout(bellAnimationTimer);
+  bellAnimationTimer = setTimeout(() => button.classList.remove("bell-pop"), 500);
+}
+
 bgm.addEventListener("ended", playNextBgmTrack);
 bgm.addEventListener("error", () => {
+  const tracks = getCurrentBgmTracks();
+  if (!tracks.length) return;
   skippedTracks += 1;
-  if (skippedTracks >= bgmTracks.length) {
+  if (skippedTracks >= tracks.length) {
     bgmSilent = true;
     return;
   }
-  bgmIndex = (bgmIndex + 1) % bgmTracks.length;
+  bgmIndex = (bgmIndex + 1) % tracks.length;
   playBgmTrack();
 });
 
@@ -353,17 +472,7 @@ function renderLobby() {
 function renderOnlineUsers() {
   const list = $("#onlineUsersList");
   if (!state.lobby || !list) return;
-  const panel = $("#onlineUsersPanel");
-  const toggleButton = $("#onlineUsersToggleButton");
-  panel?.classList.toggle("collapsed", !state.onlineUsersExpanded);
-  if (toggleButton) {
-    toggleButton.textContent = `현재 접속 유저 ${state.onlineUsersExpanded ? "▲" : "▼"}`;
-  }
-  if (!state.onlineUsersExpanded) {
-    list.innerHTML = "";
-    return;
-  }
-
+  updateOnlineUsersPanelState();
   const hiddenUsers = getHiddenUsers();
   const users = (state.lobby.onlineUsers || []).filter((user) => !hiddenUsers.has(user.nickname));
   if (!users.length) {
@@ -388,6 +497,16 @@ function renderOnlineUsers() {
   }
 }
 
+function updateOnlineUsersPanelState() {
+  const panel = $("#onlineUsersPanel");
+  const toggle = $("#onlineUsersToggleButton");
+  if (!panel || !toggle) return;
+  panel.classList.toggle("collapsed", !state.onlineUsersExpanded);
+  toggle.textContent = state.onlineUsersExpanded
+    ? "\ud604\uc7ac \uc811\uc18d \uc720\uc800 \u25b2"
+    : "\ud604\uc7ac \uc811\uc18d \uc720\uc800 \u25bc";
+}
+
 function renderRoom(room) {
   if (!room) {
     state.room = null;
@@ -410,6 +529,8 @@ function renderRoom(room) {
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
   const isHost = self?.id === room.hostId;
+  const humanPlayers = room.players.filter((player) => !player.isAI);
+  const allHumansReady = humanPlayers.length > 0 && humanPlayers.every((player) => player.ready);
   const playerList = $("#roomPlayers");
   playerList.innerHTML = "";
 
@@ -429,7 +550,7 @@ function renderRoom(room) {
 
   $("#readyButton").textContent = self?.ready ? "준비 취소" : "준비";
   $("#readyButton").disabled = !self;
-  $("#addAIButton").disabled = !isHost || room.status !== "waiting" || room.players.length >= room.maxPlayers;
+  $("#addAIButton").disabled = !isHost || room.status !== "waiting" || room.players.length >= room.maxPlayers || allHumansReady;
   $("#removeAIButton").disabled = !isHost || !room.players.some((player) => player.isAI);
   $("#startGameButton").disabled = !isHost || !room.canStart;
   $("#roomHint").textContent = "게임 시작 조건: 총 2명 이상";
@@ -439,10 +560,10 @@ function getSeatPosition(index, count) {
   const layouts = {
     1: [{ left: 50, top: 50 }],
     2: [{ left: 24, top: 50 }, { left: 76, top: 50 }],
-    3: [{ left: 50, top: 22 }, { left: 24, top: 76 }, { left: 76, top: 76 }],
-    4: [{ left: 50, top: 20 }, { left: 82, top: 52 }, { left: 50, top: 80 }, { left: 18, top: 52 }],
-    5: [{ left: 50, top: 20 }, { left: 82, top: 40 }, { left: 70, top: 78 }, { left: 30, top: 78 }, { left: 18, top: 40 }],
-    6: [{ left: 35, top: 22 }, { left: 65, top: 22 }, { left: 84, top: 52 }, { left: 65, top: 78 }, { left: 35, top: 78 }, { left: 16, top: 52 }],
+    3: [{ left: 50, top: 21 }, { left: 24, top: 79 }, { left: 76, top: 79 }],
+    4: [{ left: 28, top: 22 }, { left: 72, top: 22 }, { left: 28, top: 78 }, { left: 72, top: 78 }],
+    5: [{ left: 20, top: 21 }, { left: 50, top: 21 }, { left: 80, top: 21 }, { left: 35, top: 79 }, { left: 65, top: 79 }],
+    6: [{ left: 18, top: 21 }, { left: 50, top: 21 }, { left: 82, top: 21 }, { left: 18, top: 79 }, { left: 50, top: 79 }, { left: 82, top: 79 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
@@ -452,19 +573,27 @@ function updateResponsiveSizes() {
   const count = state.game?.players?.length || 6;
   const width = Math.max(360, window.innerWidth);
   const height = Math.max(560, window.innerHeight);
-  const boardHeight = Math.max(420, height - 120);
-  let openWidth = Math.floor(Math.min(320, width / 4.7, boardHeight / 1.95));
+  const boardHeight = Math.max(420, height - 104);
+  const tableScale = Math.min(1.35, Math.max(0.72, Math.min(width / 1280, height / 720)));
+  const targetByCount = count <= 2 ? 300 : count <= 3 ? 220 : count <= 4 ? 160 : count <= 5 ? 140 : 130;
+  const widthLimitByCount = count <= 2 ? width / 4.4 : count <= 3 ? width / 5.6 : count <= 4 ? width / 6.4 : width / 8.55;
+  const heightLimitByCount = count <= 2 ? boardHeight / 2.25 : count <= 3 ? boardHeight / 2.8 : count <= 4 ? boardHeight / 3.35 : boardHeight / 4.45;
+  let openWidth = Math.floor(Math.min(targetByCount * tableScale, widthLimitByCount, heightLimitByCount));
 
-  if (count >= 5) openWidth = Math.min(openWidth, Math.floor(Math.min(width / 8.2, boardHeight / 3.05)));
-  else if (count === 4) openWidth = Math.min(openWidth, Math.floor(Math.min(width / 6.5, boardHeight / 2.7)));
-  else if (count === 3) openWidth = Math.min(openWidth, Math.floor(Math.min(width / 5.6, boardHeight / 2.45)));
-  else if (count === 2) openWidth = Math.min(openWidth, Math.floor(Math.min(width / 4.2, boardHeight / 2.05)));
+  openWidth = Math.max(count >= 5 ? 112 : 122, openWidth);
+  const deckWidth = Math.max(78, Math.round(openWidth * 0.74));
+  const deckOffset = deckWidth + Math.max(5, Math.round(openWidth * 0.04));
+  const bellBase = count <= 2 ? 178 : count <= 4 ? 138 : 123;
+  const bellSize = Math.max(96, Math.min(210, Math.round(bellBase * tableScale)));
+  const seatWidth = Math.round(openWidth + deckOffset + 8);
+  const cardScale = openWidth / 160;
+  const playerScale = Math.min(1.08, Math.max(0.72, cardScale));
+  const timerScale = Math.min(1.05, Math.max(0.78, tableScale));
 
-  openWidth = Math.max(88, openWidth);
-  const deckWidth = Math.max(70, Math.round(openWidth * 0.82));
-  const bellSize = Math.max(72, Math.min(180, Math.round(Math.min(width, height) * 0.16)));
-  const seatWidth = Math.max(openWidth + Math.round(deckWidth * 0.62) + 34, Math.min(390, openWidth + deckWidth + 48));
-
+  root.style.setProperty("--table-scale", tableScale.toFixed(3));
+  root.style.setProperty("--card-scale", cardScale.toFixed(3));
+  root.style.setProperty("--player-scale", playerScale.toFixed(3));
+  root.style.setProperty("--timer-scale", timerScale.toFixed(3));
   root.style.setProperty("--open-card-width", `${openWidth}px`);
   root.style.setProperty("--open-card-height", `${Math.round(openWidth * 4 / 3)}px`);
   root.style.setProperty("--deck-card-width", `${deckWidth}px`);
@@ -473,6 +602,7 @@ function updateResponsiveSizes() {
   root.style.setProperty("--card-height", `${Math.round(openWidth * 4 / 3)}px`);
   root.style.setProperty("--bell-size", `${bellSize}px`);
   root.style.setProperty("--seat-width", `${seatWidth}px`);
+  root.style.setProperty("--deck-offset", `${deckOffset}px`);
 }
 
 function renderGame(game) {
@@ -570,6 +700,9 @@ function renderFrontCard(card, highlight = []) {
       <div class="character-fallback" aria-hidden="true"></div>
       <img alt="" aria-hidden="true" src="${CHARACTER_ASSETS[item.characterId]}" />
     `;
+    piece.querySelector("img").addEventListener("load", () => {
+      piece.classList.add("image-loaded");
+    });
     piece.querySelector("img").addEventListener("error", (event) => {
       event.currentTarget.remove();
     });
@@ -609,19 +742,31 @@ function updateGameOverlay(game) {
     overlay.className = "result-overlay result-card";
     overlay.innerHTML = renderGameResult(state.gameResult);
     overlay.querySelector(".overlay-leave-button")?.addEventListener("click", () => socket.emit("leaveRoom"));
+    overlay.querySelector(".overlay-watch-button")?.addEventListener("click", () => {
+      state.gameResult = null;
+      updateGameOverlay(state.game || { players: [] });
+    });
     return;
   }
 
   const self = game.players?.find((player) => player.id === game.selfPlayerId);
-  if (self?.spectator && game.status === "playing") {
+  if (self && !self.spectator) state.spectatorOverlayDismissedFor = null;
+  if (self?.spectator && game.status === "playing" && state.spectatorOverlayDismissedFor !== self.id) {
     overlay.className = "result-overlay result-card";
     overlay.innerHTML = `
       <div class="result-box">
         <h2>패배</h2>
-        <p class="hint-text">관전모드</p>
-        <button class="primary-button overlay-leave-button" type="button">나가기</button>
+        <p class="hint-text">관전모드로 보거나 바로 나갈 수 있습니다</p>
+        <div class="result-actions">
+          <button class="secondary-button overlay-watch-button" type="button">관전모드</button>
+          <button class="primary-button overlay-leave-button" type="button">나가기</button>
+        </div>
       </div>
     `;
+    overlay.querySelector(".overlay-watch-button").addEventListener("click", () => {
+      state.spectatorOverlayDismissedFor = self.id;
+      updateGameOverlay(game);
+    });
     overlay.querySelector(".overlay-leave-button").addEventListener("click", () => socket.emit("leaveRoom"));
     return;
   }
@@ -635,12 +780,9 @@ function updateGameOverlay(game) {
 function renderGameResult(result) {
   const isWinner = result.winner?.id === result.selfPlayerId;
   const title = isWinner ? "승리" : "패배";
-  const actionsEnabled = Boolean(result.actionsEnabled);
   const hint = isWinner
-    ? "5초 후 대기실로 이동합니다"
-    : actionsEnabled
-      ? "관전모드입니다. 대기실로 이동할 수 있습니다"
-      : "5초 후 관전모드/대기실 이동을 선택할 수 있습니다";
+    ? "5초 후 자동 이동하거나 지금 대기실로 이동할 수 있습니다"
+    : "관전모드로 보거나 바로 나갈 수 있습니다";
   const rows = result.players
     .map((player) => `
       <div>
@@ -658,13 +800,17 @@ function renderGameResult(result) {
       <p class="hint-text">${hint}</p>
       <p class="hint-text">승자: ${renderName(result.winner)}</p>
       ${result.statsExcluded ? `<p class="hint-text">AI 포함 게임은 전적에 반영되지 않습니다</p>` : ""}
-      <button class="primary-button overlay-leave-button" type="button" ${actionsEnabled ? "" : "disabled"}>대기실 이동</button>
+      <div class="result-actions">
+        ${isWinner ? "" : `<button class="secondary-button overlay-watch-button" type="button">관전모드</button>`}
+        <button class="primary-button overlay-leave-button" type="button">${isWinner ? "대기실 이동" : "나가기"}</button>
+      </div>
       <div class="result-score-list">${rows}</div>
     </div>
   `;
 }
 
 function openCreateRoomModal() {
+  closeSettingsPanel();
   $("#createError").textContent = "";
   $("#createRoomModal").classList.remove("hidden");
   $("#roomTitleInput").focus();
@@ -700,6 +846,10 @@ function closeNicknameChangeModal() {
   $("#nicknameChangeModal").classList.add("hidden");
 }
 
+function closeSettingsPanel() {
+  $("#settingsPanel").classList.add("hidden");
+}
+
 function setupBellImage() {
   const button = $("#bellButton");
   const image = $("#bellImage");
@@ -715,7 +865,7 @@ function setupBellImage() {
   };
   image.addEventListener("load", markReady);
   image.addEventListener("error", markFallback);
-  image.src = `${BELL_IMAGE_ASSET}?v=${Date.now()}`;
+  image.src = BELL_IMAGE_URL;
   if (image.complete) {
     if (image.naturalWidth > 0) markReady();
     else markFallback();
@@ -805,26 +955,41 @@ $("#nicknameChangeForm").addEventListener("submit", (event) => {
 });
 
 $("#readyButton").addEventListener("click", () => socket.emit("toggleReady"));
-$("#addAIButton").addEventListener("click", () => socket.emit("addAI"));
+$("#addAIButton").addEventListener("click", () => {
+  if ($("#addAIButton").disabled) return;
+  socket.emit("addAI");
+});
 $("#removeAIButton").addEventListener("click", () => socket.emit("removeAI"));
 $("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
 $("#refreshUsersButton").addEventListener("click", () => socket.emit("refreshLobby"));
-$("#onlineUsersToggleButton").addEventListener("click", () => {
+$("#onlineUsersToggleButton").addEventListener("click", (event) => {
+  event.stopPropagation();
+  closeSettingsPanel();
   state.onlineUsersExpanded = !state.onlineUsersExpanded;
-  renderOnlineUsers();
+  updateOnlineUsersPanelState();
 });
 
-$("#settingsButton").addEventListener("click", () => {
+$("#settingsButton").addEventListener("click", (event) => {
+  event.stopPropagation();
   $("#settingsPanel").classList.toggle("hidden");
 });
 
-$("#volumeSlider").addEventListener("input", (event) => {
-  applyVolume(event.target.value);
+$("#bgmVolumeSlider").addEventListener("input", (event) => {
+  applyBgmVolume(event.target.value);
+});
+
+$("#bgmModeSelect").addEventListener("change", (event) => {
+  applyBgmMode(event.target.value, true);
+});
+
+$("#sfxVolumeSlider").addEventListener("input", (event) => {
+  applySfxVolume(event.target.value);
 });
 
 $("#leaveButton").addEventListener("click", () => {
+  closeSettingsPanel();
   if (state.activeScreen === "room" || state.activeScreen === "game") {
     socket.emit("leaveRoom");
     return;
@@ -841,12 +1006,12 @@ $("#leaveButton").addEventListener("click", () => {
 });
 
 $("#onlineUsersPanel").addEventListener("click", (event) => {
-  if (!state.onlineUsersExpanded) return;
-  if (event.target.closest(".online-user") || event.target.closest(".mini-button") || event.target.closest(".panel-toggle-button")) return;
+  if (event.target.closest(".online-user") || event.target.closest(".mini-button")) return;
   showHiddenUsersMenu(event.clientX, event.clientY);
 });
 
 document.addEventListener("click", (event) => {
+  if (!event.target.closest("#settingsPanel") && !event.target.closest("#settingsButton")) closeSettingsPanel();
   if (event.target.closest("#userContextMenu") || event.target.closest("#onlineUsersPanel")) return;
   hideContextMenu();
 });
@@ -855,6 +1020,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     hideContextMenu();
     closeCreateRoomModal();
+    closeSettingsPanel();
   }
   if (isFormFieldFocused() || state.activeScreen !== "game") return;
   if (event.code === "Space") {
@@ -919,6 +1085,8 @@ socket.on("errorMessage", (message) => {
 socket.on("bellResult", (payload) => {
   playBellSound();
   const ringerName = payload.bellRingerDisplayName || payload.bellRingerName;
+  showBellLog(ringerName);
+  if (payload.correct) playBellAnimation();
   const message = payload.correct ? `${ringerName} 정답!` : `${ringerName} 오답!`;
   showToast(message);
 });
@@ -940,7 +1108,6 @@ socket.on("emoteEvent", (payload) => {
 
 socket.on("gameResult", (payload) => {
   payload.selfPlayerId = state.game?.selfPlayerId;
-  payload.actionsEnabled = false;
   state.gameResult = payload;
   const isWinner = payload.winner?.id === payload.selfPlayerId;
   const returnAfterMs = payload.returnAfterMs || 5000;
@@ -949,12 +1116,6 @@ socket.on("gameResult", (payload) => {
     playVictorySoundOnce();
   }
   updateGameOverlay(state.game || { wrongFlash: false });
-  setTimeout(() => {
-    if (state.gameResult === payload) {
-      payload.actionsEnabled = true;
-      updateGameOverlay(state.game || { wrongFlash: false });
-    }
-  }, returnAfterMs);
   if (isWinner) {
     setTimeout(() => {
       state.game = null;
@@ -977,7 +1138,10 @@ socket.on("connect", () => {
   }
 });
 
-applyVolume(getStoredVolume());
+preloadAssets();
+applyBgmMode(getStoredBgmMode(), false);
+applyBgmVolume(getStoredBgmVolume());
+applySfxVolume(getStoredSfxVolume());
 setupBellImage();
 updateResponsiveSizes();
 showScreen("nickname");

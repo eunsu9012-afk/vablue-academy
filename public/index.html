@@ -15,10 +15,23 @@
         </div>
         <button id="settingsButton" class="icon-button" type="button" title="설정">⚙</button>
         <section id="settingsPanel" class="settings-panel hidden" aria-label="설정 패널">
+          <label class="settings-row">
+            <span>BGM 모드</span>
+            <select id="bgmModeSelect">
+              <option value="all">전부</option>
+              <option value="energetic">경쾌</option>
+              <option value="calm">잔잔</option>
+            </select>
+          </label>
           <label class="volume-row">
-            <span>BGM</span>
-            <input id="volumeSlider" type="range" min="0" max="10" step="1" />
-            <strong id="volumeValue">5</strong>
+            <span>BGM 볼륨</span>
+            <input id="bgmVolumeSlider" type="range" min="1" max="5" step="1" />
+            <strong id="bgmVolumeValue">3</strong>
+          </label>
+          <label class="volume-row">
+            <span>효과음 볼륨</span>
+            <input id="sfxVolumeSlider" type="range" min="1" max="5" step="1" />
+            <strong id="sfxVolumeValue">3</strong>
           </label>
           <button id="nicknameChangeButton" class="secondary-button" type="button">닉네임 변경</button>
           <button id="leaveButton" class="secondary-button" type="button">나가기</button>
@@ -48,28 +61,31 @@
                     <strong>게임 인원</strong>
                     <span>1~6인 플레이 가능</span>
                     <span>AI 추가 가능</span>
-                    <small>(총 2명 이상부터 시작)</small>
+                    <small>총 2명 이상부터 시작</small>
                   </div>
                 </article>
                 <article class="guide-item">
                   <span class="guide-icon">⭐</span>
                   <div>
                     <strong>점수제 방식</strong>
-                    <span>카드 수가 아니라 점수로 승부합니다</span>
+                    <span>카드 수가 아니라</span>
+                    <span>점수로 승부합니다</span>
                   </div>
                 </article>
                 <article class="guide-item">
                   <span class="guide-icon">🃏</span>
                   <div>
                     <strong>카드 넘기기</strong>
-                    <span>카드 덱을 마우스 왼쪽 클릭</span>
+                    <span>카드 덱을</span>
+                    <span>마우스 왼쪽 클릭</span>
                   </div>
                 </article>
                 <article class="guide-item">
                   <span class="guide-icon">🔔</span>
                   <div>
                     <strong>종 치기</strong>
-                    <span>전체 테이블에서 같은 캐릭터가 5개가 되면</span>
+                    <span>전체 테이블에서</span>
+                    <span>같은 캐릭터가 5개가 되면</span>
                     <span>스페이스바로 종을 치세요</span>
                   </div>
                 </article>
@@ -77,8 +93,8 @@
                   <span class="guide-icon">🔥</span>
                   <div>
                     <strong>게임 모드</strong>
-                    <span>일반 모드 → 한 카드에 한 캐릭터</span>
-                    <span>하드 모드 → 한 카드에 여러 캐릭터 등장</span>
+                    <span>일반 모드: 한 카드에 한 캐릭터</span>
+                    <span>하드 모드: 한 카드에 여러 캐릭터</span>
                   </div>
                 </article>
               </div>
@@ -90,6 +106,15 @@
                 <span id="onlineCount" class="pill">0명 접속</span>
               </div>
               <div id="roomList" class="room-list"></div>
+            </section>
+
+            <section id="onlineUsersPanel" class="panel online-users-panel">
+              <div class="section-title-row">
+                <h2>현재 접속 유저</h2>
+                <button id="onlineUsersToggleButton" class="mini-button" type="button">현재 접속 유저 ▼</button>
+                <button id="refreshUsersButton" class="mini-button" type="button">새로고침</button>
+              </div>
+              <div id="onlineUsersList" class="online-users-list"></div>
             </section>
 
             <aside class="lobby-side">
@@ -104,14 +129,6 @@
                 <ol id="topWinsList" class="top-list"></ol>
                 <h2>서버 최고승률 TOP3</h2>
                 <ol id="topWinRatesList" class="top-list"></ol>
-              </section>
-
-              <section id="onlineUsersPanel" class="panel online-users-panel">
-                <div class="section-title-row">
-                  <button id="onlineUsersToggleButton" class="panel-toggle-button" type="button">현재 접속 유저 ▼</button>
-                  <button id="refreshUsersButton" class="mini-button" type="button">새로고침</button>
-                </div>
-                <div id="onlineUsersList" class="online-users-list"></div>
               </section>
             </aside>
           </div>
@@ -146,6 +163,7 @@
               <strong id="turnTimer" class="turn-timer">6.0</strong>
               <span id="gamePenaltyBadge" class="badge penalty-badge">[1배]</span>
             </div>
+            <div id="bellLog" class="bell-log hidden"></div>
             <div id="gamePlayers" class="game-players"></div>
             <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">
               <img id="bellImage" src="/assets/bell/bell.png?v=2" alt="" aria-hidden="true" />
@@ -177,7 +195,6 @@
         <label>
           <span>최대 인원</span>
           <select id="maxPlayersSelect">
-            <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
             <option value="4">4</option>
