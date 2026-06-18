@@ -68,6 +68,8 @@ const state = {
   passwordRoomId: null,
   gameResult: null,
   onlineUsersExpanded: false,
+  mobileGameInfoExpanded: false,
+  mobileInfoRoomId: null,
   spectatorOverlayDismissedFor: null,
   latency: { value: null, state: "measuring" },
 };
@@ -80,6 +82,7 @@ let bellLogTimer = null;
 let bellAnimationTimer = null;
 let latencyTimer = null;
 let latencyNonce = 0;
+let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
 
 function showScreen(name) {
@@ -94,6 +97,7 @@ function showScreen(name) {
     setText("#turnTimer", "--");
     $("#turnTimer")?.classList.remove("urgent");
   }
+  updateMobileMode();
 }
 
 function showToast(message) {
@@ -130,6 +134,83 @@ function setText(selector, text) {
 function isFormFieldFocused() {
   const tag = document.activeElement?.tagName;
   return ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
+}
+
+function isMobileMode() {
+  return window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
+}
+
+function getSelfPlayer(game = state.game) {
+  return game?.players?.find((player) => player.id === game.selfPlayerId) || null;
+}
+
+function isSelfAbleToAct(game = state.game) {
+  const self = getSelfPlayer(game);
+  return Boolean(game && self && !self.spectator && !self.eliminated && game.status === "playing" && !game.bellLocked);
+}
+
+function isBellAvailable(game = state.game) {
+  if (!isSelfAbleToAct(game)) return false;
+  const totals = {};
+  for (const player of game.players || []) {
+    const counts = player.topCard?.counts || {};
+    for (const [characterId, count] of Object.entries(counts)) {
+      totals[characterId] = (totals[characterId] || 0) + Number(count || 0);
+    }
+  }
+  return Object.values(totals).some((count) => count === 5);
+}
+
+function isFlipAvailable(game = state.game) {
+  if (!isSelfAbleToAct(game)) return false;
+  const self = getSelfPlayer(game);
+  return self?.id === game.currentTurnPlayerId;
+}
+
+function updateMobileTouchHint(game = state.game) {
+  const hint = $("#mobileTouchHint");
+  if (!hint) return;
+  if (!isMobileMode() || state.activeScreen !== "game" || !game || game.resultVisible) {
+    hint.classList.add("hidden");
+    hint.textContent = "";
+    return;
+  }
+  if (isBellAvailable(game)) {
+    hint.textContent = "화면을 터치해서 종을 치세요";
+    hint.classList.remove("hidden");
+    return;
+  }
+  if (isFlipAvailable(game)) {
+    hint.textContent = "화면을 터치해서 카드를 뒤집으세요";
+    hint.classList.remove("hidden");
+    return;
+  }
+  hint.classList.add("hidden");
+  hint.textContent = "";
+}
+
+function updateMobileGameInfoPanel() {
+  const panel = $("#gameInfoPanel");
+  const button = $("#gameInfoToggleButton");
+  if (!panel || !button) return;
+  const mobile = isMobileMode();
+  button.classList.toggle("hidden", !mobile || state.activeScreen !== "game");
+  if (!mobile) {
+    panel.classList.remove("mobile-collapsed");
+    button.setAttribute("aria-expanded", "true");
+    button.textContent = "게임 정보 ▲";
+    return;
+  }
+  const collapsed = !state.mobileGameInfoExpanded;
+  panel.classList.toggle("mobile-collapsed", collapsed);
+  button.setAttribute("aria-expanded", String(!collapsed));
+  button.textContent = collapsed ? "게임 정보 ▼" : "게임 정보 ▲";
+}
+
+function updateMobileMode() {
+  document.body.classList.toggle("is-mobile", isMobileMode());
+  updateMobileGameInfoPanel();
+  updateMobileTouchHint();
 }
 
 function formatWinRate(value) {
@@ -635,6 +716,7 @@ function renderRoom(room) {
 }
 
 function getSeatPosition(index, count) {
+  if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
     1: [{ left: 50, top: 50 }],
     2: [{ left: 24, top: 50 }, { left: 76, top: 50 }],
@@ -646,6 +728,18 @@ function getSeatPosition(index, count) {
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
 
+function getMobileSeatPosition(index, count) {
+  const layouts = {
+    1: [{ left: 50, top: 82 }],
+    2: [{ left: 50, top: 20 }, { left: 50, top: 81 }],
+    3: [{ left: 50, top: 18 }, { left: 29, top: 78 }, { left: 71, top: 78 }],
+    4: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 29, top: 80 }, { left: 71, top: 80 }],
+    5: [{ left: 29, top: 17 }, { left: 71, top: 17 }, { left: 29, top: 68 }, { left: 71, top: 68 }, { left: 50, top: 87 }],
+    6: [{ left: 29, top: 16 }, { left: 71, top: 16 }, { left: 29, top: 67 }, { left: 71, top: 67 }, { left: 29, top: 87 }, { left: 71, top: 87 }],
+  };
+  return (layouts[count] || layouts[6])[index] || { left: 50, top: 82 };
+}
+
 function updateResponsiveSizes() {
   const root = document.documentElement;
   const count = state.game?.players?.length || 6;
@@ -653,6 +747,32 @@ function updateResponsiveSizes() {
   const boardRect = board?.getBoundingClientRect();
   const width = Math.max(360, Math.floor(boardRect?.width || window.innerWidth));
   const height = Math.max(420, Math.floor(boardRect?.height || window.innerHeight - 104));
+  if (isMobileMode()) {
+    const mobileWidth = Math.max(320, width);
+    const openWidth = Math.round(Math.min(74, Math.max(58, mobileWidth * 0.18)));
+    const deckWidth = Math.round(openWidth * 0.72);
+    const deckOffset = deckWidth + Math.max(4, Math.round(openWidth * 0.06));
+    const bellSize = Math.round(Math.min(106, Math.max(78, mobileWidth * 0.24)));
+    const seatWidth = Math.round(openWidth + deckOffset + 8);
+    const cardScale = openWidth / 160;
+    const playerScale = Math.min(0.72, Math.max(0.56, cardScale));
+    const timerScale = Math.min(0.78, Math.max(0.68, mobileWidth / 430));
+
+    root.style.setProperty("--table-scale", "0.720");
+    root.style.setProperty("--card-scale", cardScale.toFixed(3));
+    root.style.setProperty("--player-scale", playerScale.toFixed(3));
+    root.style.setProperty("--timer-scale", timerScale.toFixed(3));
+    root.style.setProperty("--open-card-width", `${openWidth}px`);
+    root.style.setProperty("--open-card-height", `${Math.round(openWidth * 4 / 3)}px`);
+    root.style.setProperty("--deck-card-width", `${deckWidth}px`);
+    root.style.setProperty("--deck-card-height", `${Math.round(deckWidth * 4 / 3)}px`);
+    root.style.setProperty("--card-width", `${openWidth}px`);
+    root.style.setProperty("--card-height", `${Math.round(openWidth * 4 / 3)}px`);
+    root.style.setProperty("--bell-size", `${bellSize}px`);
+    root.style.setProperty("--seat-width", `${seatWidth}px`);
+    root.style.setProperty("--deck-offset", `${deckOffset}px`);
+    return;
+  }
   const boardHeight = Math.max(420, height);
   const tableScale = Math.min(1.35, Math.max(0.72, Math.min(width / 1030, height / 620)));
   const targetByCount = count <= 2 ? 300 : count <= 3 ? 220 : count <= 4 ? 160 : count <= 5 ? 140 : 130;
@@ -758,10 +878,16 @@ function renderEmptyCardSpace() {
 }
 
 function renderGame(game) {
+  const previousRoomId = state.game?.roomId;
   state.game = game;
   state.room = null;
+  if (previousRoomId !== game.roomId) {
+    state.mobileInfoRoomId = game.roomId;
+    state.mobileGameInfoExpanded = false;
+  }
   showScreen("game");
   startBgmWhenAllowed();
+  updateMobileMode();
   updateResponsiveSizes();
 
   setText("#gameModeBadge", `[${modeLabel(game.mode)}]`);
@@ -808,6 +934,8 @@ function renderGame(game) {
 
   startTurnTimer(game);
   renderGameInfoPanel(game);
+  updateMobileGameInfoPanel();
+  updateMobileTouchHint(game);
   updateGameOverlay(game);
 }
 
@@ -886,6 +1014,49 @@ function sendLatencyPing() {
     state.latency = { value: null, state: "unstable" };
     renderLatency();
   }, 2500);
+}
+
+function isAnyModalOpen() {
+  return [...document.querySelectorAll(".modal-backdrop")].some((modal) => !modal.classList.contains("hidden"));
+}
+
+function shouldIgnoreMobileGameTouch(event) {
+  if (!isMobileMode() || state.activeScreen !== "game") return true;
+  if (isAnyModalOpen()) return true;
+  if (!$("#settingsPanel")?.classList.contains("hidden")) return true;
+  return Boolean(event.target.closest([
+    "button",
+    "input",
+    "select",
+    "textarea",
+    "label",
+    "a",
+    "#settingsPanel",
+    "#settingsButton",
+    "#gameInfoPanel",
+    "#gameInfoToggleButton",
+    "#resultOverlay",
+    ".modal-backdrop",
+    ".modal-card",
+  ].join(",")));
+}
+
+function handleMobileGameBoardTouch(event) {
+  if (shouldIgnoreMobileGameTouch(event)) return;
+  const now = Date.now();
+  if (now - mobileTouchLastAt < 300) return;
+
+  if (isBellAvailable()) {
+    mobileTouchLastAt = now;
+    event.preventDefault();
+    socket.emit("ringBell");
+    return;
+  }
+  if (isFlipAvailable()) {
+    mobileTouchLastAt = now;
+    event.preventDefault();
+    socket.emit("flipCard");
+  }
 }
 
 function startLatencyMonitor() {
@@ -1237,6 +1408,11 @@ $("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
 $("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
+$("#gameBoard")?.addEventListener("pointerup", handleMobileGameBoardTouch);
+$("#gameInfoToggleButton")?.addEventListener("click", () => {
+  state.mobileGameInfoExpanded = !state.mobileGameInfoExpanded;
+  updateMobileGameInfoPanel();
+});
 $("#refreshUsersButton").addEventListener("click", () => socket.emit("refreshLobby"));
 $("#onlineUsersToggleButton").addEventListener("click", (event) => {
   event.stopPropagation();
@@ -1306,7 +1482,12 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("resize", updateResponsiveSizes);
+window.addEventListener("resize", () => {
+  updateMobileMode();
+  updateResponsiveSizes();
+});
+
+updateMobileMode();
 
 socket.on("nicknameError", (message) => {
   $("#nicknameError").textContent = message;
