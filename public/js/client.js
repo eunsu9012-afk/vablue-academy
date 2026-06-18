@@ -835,8 +835,8 @@ function renderReactionSpeeds(rows) {
 
 function formatReactionPlayerName(row) {
   const name = row.displayName || row.nickname || "";
-  if (!row.isAI || /^AI\\s/.test(name)) return name;
-  return `AI ${name}`;
+  if (!row.isAI) return name;
+  return `AI ${name.replace(/^AI\s+/, "")}`;
 }
 
 function renderGameUsers(players) {

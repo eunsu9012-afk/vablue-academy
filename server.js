@@ -33,9 +33,9 @@ const AI_CORRECT_MISS_PROBABILITY = 0.1;
 const AI_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced"]);
 const DEFAULT_AI_DIFFICULTY = "intermediate";
 const AI_DIFFICULTY_SETTINGS = {
-  beginner: { label: "초급", correctDelay: [900, 1600], mistakeChance: 0.05 },
-  intermediate: { label: "중급", correctDelay: [550, 1100], mistakeChance: 0.02 },
-  advanced: { label: "고급", correctDelay: [350, 750], mistakeChance: 0.005 },
+  beginner: { label: "초급", correctDelay: [1000, 1800], mistakeChance: 0.04 },
+  intermediate: { label: "중급", correctDelay: [700, 1300], mistakeChance: 0.03 },
+  advanced: { label: "고급", correctDelay: [450, 900], mistakeChance: 0.02 },
 };
 const AI_MIN_BELL_REACTION_MS = 300;
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
@@ -969,13 +969,42 @@ function updateCorrectConditionWindow(room) {
   if (!verdict.correct) {
     room.game.correctConditionStartedAt = null;
     room.game.correctConditionVersion = -1;
+    room.game.collectingCorrectReactions = false;
+    room.game.reactionPlayerIds = new Set();
     return;
   }
   if (!room.game.correctConditionStartedAt) {
     room.game.correctConditionStartedAt = Date.now();
     room.game.correctConditionVersion = room.game.tableVersion;
+    room.game.collectingCorrectReactions = false;
+    room.game.reactionPlayerIds = new Set();
+    room.game.recentReactionSpeeds = [];
     logEvent("Correct condition opened", `${room.title} version=${room.game.tableVersion}`);
   }
+}
+
+function recordCorrectReaction(room, player, reactedAt = Date.now()) {
+  if (!room?.game || !player || player.spectator || player.eliminated) return false;
+  if (!room.game.correctConditionStartedAt) return false;
+  if (!room.game.reactionPlayerIds) room.game.reactionPlayerIds = new Set();
+  if (room.game.reactionPlayerIds.has(player.id)) return false;
+
+  const reactionMs = Math.max(0, reactedAt - room.game.correctConditionStartedAt);
+  room.game.reactionPlayerIds.add(player.id);
+  room.game.recentReactionSpeeds = [
+    ...(room.game.recentReactionSpeeds || []),
+    {
+      playerId: player.id,
+      nickname: player.nickname,
+      displayName: player.displayName,
+      isAI: player.isAI,
+      isVaNickname: player.isVaNickname,
+      reactionMs,
+    },
+  ]
+    .sort((a, b) => a.reactionMs - b.reactionMs)
+    .slice(0, 3);
+  return true;
 }
 
 function cardFingerprint(card) {
@@ -1063,6 +1092,8 @@ function clearRoundCards(room) {
     room.game.openPileFingerprints = {};
     room.game.correctConditionStartedAt = null;
     room.game.correctConditionVersion = -1;
+    room.game.collectingCorrectReactions = false;
+    room.game.reactionPlayerIds = new Set();
   }
 }
 
@@ -1211,6 +1242,8 @@ function beginGame(room) {
     lastOpenedCardId: null,
     correctConditionStartedAt: null,
     correctConditionVersion: -1,
+    collectingCorrectReactions: false,
+    reactionPlayerIds: new Set(),
     recentReactionSpeeds: [],
     resultVisible: false,
     resultTimer: null,
@@ -1279,8 +1312,13 @@ function applyWrongPenalty(room, bellRinger) {
 
 function handleBell(room, bellRinger) {
   if (!room || room.status !== "playing" || !room.game) return;
-  if (room.game.bellLocked) return;
   if (!bellRinger || bellRinger.spectator || bellRinger.eliminated) return;
+  if (room.game.bellLocked) {
+    if (room.game.collectingCorrectReactions && recordCorrectReaction(room, bellRinger)) {
+      emitGameState(room);
+    }
+    return;
+  }
 
   clearTurnTimer(room);
   room.game.bellLocked = true;
@@ -1292,20 +1330,8 @@ function handleBell(room, bellRinger) {
   let scoreChanges = [];
   if (verdict.correct) {
     logEvent("Correct", `${bellRinger.nickname} / ${verdict.matchedCharacters.join(",")}`);
-    const reactedAt = Date.now();
-    const reactionMs = room.game.correctConditionStartedAt
-      ? Math.max(0, reactedAt - room.game.correctConditionStartedAt)
-      : null;
-    if (reactionMs !== null) {
-      room.game.recentReactionSpeeds = [{
-        playerId: bellRinger.id,
-        nickname: bellRinger.nickname,
-        displayName: bellRinger.displayName,
-        isAI: bellRinger.isAI,
-        isVaNickname: bellRinger.isVaNickname,
-        reactionMs,
-      }];
-    }
+    room.game.collectingCorrectReactions = true;
+    recordCorrectReaction(room, bellRinger, Date.now());
     scoreChanges = applyCorrectPenalty(room, bellRinger);
   } else {
     logEvent("Wrong", bellRinger.nickname);
@@ -1459,8 +1485,14 @@ function scheduleAIBell(room) {
     const timer = setTimeout(() => {
       const liveRoom = rooms.get(room.id);
       if (!liveRoom?.game || liveRoom.status !== "playing") return;
-      if (liveRoom.game.bellLocked || liveRoom.game.tableVersion !== tableVersion) return;
+      if (liveRoom.game.tableVersion !== tableVersion) return;
       const liveAI = findPlayer(liveRoom, aiId);
+      if (liveRoom.game.bellLocked) {
+        if (liveRoom.game.collectingCorrectReactions && recordCorrectReaction(liveRoom, liveAI)) {
+          emitGameState(liveRoom);
+        }
+        return;
+      }
       handleBell(liveRoom, liveAI);
     }, delay);
     pushAITimer(room, timer);
