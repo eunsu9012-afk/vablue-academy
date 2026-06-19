@@ -42,6 +42,7 @@ const AI_DIFFICULTY_SETTINGS = {
   tutorial: { label: "튜토리얼", correctDelay: [9000, 14000], mistakeChance: 0 },
 };
 const AI_MIN_BELL_REACTION_MS = 300;
+const ASSETS_NOT_READY_MESSAGE = "이미지 로딩이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
 const EMOTES = {
@@ -336,6 +337,7 @@ function createHumanPlayer(user, isHost = false) {
     eliminated: false,
     spectator: false,
     connected: true,
+    assetsReady: Boolean(user.assetsReady),
     lastEmoteAt: 0,
   };
 }
@@ -361,6 +363,7 @@ function createAIPlayer(room) {
     eliminated: false,
     spectator: false,
     connected: true,
+    assetsReady: true,
     lastEmoteAt: 0,
   };
 }
@@ -526,6 +529,7 @@ function serializeRoom(room, selfPlayerId = null) {
       ready: player.ready,
       isHost: player.id === room.hostId,
       connected: player.connected,
+      assetsReady: player.isAI ? true : Boolean(player.assetsReady),
       score: player.score,
       eliminated: player.eliminated,
       spectator: player.spectator,
@@ -574,6 +578,7 @@ function serializeGame(room, selfPlayerId = null) {
       aiDifficultyLabel: player.isAI ? getAIDifficultySettings(room).label : null,
       isHost: player.id === room.hostId,
       connected: player.connected,
+      assetsReady: player.isAI ? true : Boolean(player.assetsReady),
       score: player.score,
       stats: room.isTutorial || player.isAI ? null : (player.statsSnapshot || snapshotPlayerStats(player)),
       deckCount: player.spectator ? 0 : (player.deck?.length || PRIVATE_DECK_SIZE),
@@ -603,7 +608,7 @@ function canStartGame(room) {
   if (room.status !== "waiting") return false;
   const total = room.players.length;
   if (total < 2 || total > 6) return false;
-  return getHumanPlayers(room).every((player) => player.ready);
+  return getHumanPlayers(room).every((player) => player.ready && player.assetsReady);
 }
 
 function areAllHumanPlayersReady(room) {
@@ -629,6 +634,7 @@ function attachSocketToUser(socket, user) {
   user.socketId = socket.id;
   user.connected = true;
   user.disconnectedAt = null;
+  user.assetsReady = Boolean(socket.data.assetsReady);
   socket.data.nickname = user.nickname;
   if (user.reconnectTimer) {
     clearTimeout(user.reconnectTimer);
@@ -641,6 +647,7 @@ function syncPlayerIdentity(player, user) {
   player.nickname = user.nickname;
   player.displayName = user.displayName;
   player.isVaNickname = user.isVaNickname;
+  if (!player.isAI) player.assetsReady = Boolean(user.assetsReady);
 }
 
 async function changeUserNickname(socket, nextNickname) {
@@ -1530,6 +1537,7 @@ function handleFlipCard(room, player) {
   if (!room || room.status !== "playing" || !room.game) return false;
   if (room.game.bellLocked) return false;
   if (!player || player.spectator || player.eliminated) return false;
+  if (!player.isAI && !player.assetsReady) return false;
   if (room.game.currentTurnPlayerId !== player.id) return false;
   if (Date.now() < Number(room.game.nextFlipAllowedAt || 0)) return false;
 
@@ -1769,8 +1777,8 @@ function scheduleAIBell(room) {
 
     const [correctMin, correctMax] = difficulty.correctDelay;
     const delay = verdict.correct
-      ? Math.max(AI_MIN_BELL_REACTION_MS, randomInt(correctMin, correctMax))
-      : randomInt(300, 800);
+      ? Math.max(TURN_START_DELAY_MS, AI_MIN_BELL_REACTION_MS, randomInt(correctMin, correctMax))
+      : Math.max(TURN_START_DELAY_MS, randomInt(300, 800));
     const aiId = ai.id;
     const tableVersion = room.game.tableVersion;
     if (!verdict.correct) {
@@ -1848,6 +1856,7 @@ function handleReconnect(socket, nickname, user) {
   if (room && player) {
     player.socketId = socket.id;
     player.connected = true;
+    if (!player.isAI) player.assetsReady = Boolean(user.assetsReady);
     socket.join(room.id);
     socket.emit("reconnectResult", { success: true, roomId: room.id, spectator: player.spectator });
     logEvent("Reconnect success", `${nickname} / ${room.title}`);
@@ -1925,6 +1934,7 @@ io.on("connection", (socket) => {
       playerId: null,
       disconnectedAt: null,
       reconnectTimer: null,
+      assetsReady: Boolean(socket.data.assetsReady),
     };
     usersByNickname.set(cleanNickname, user);
     socket.data.nickname = cleanNickname;
@@ -1940,9 +1950,27 @@ io.on("connection", (socket) => {
     emitLobbyState(socket);
   });
 
+  socket.on("clientAssetsReady", () => {
+    socket.data.assetsReady = true;
+    const user = getCurrentUser(socket);
+    if (user) user.assetsReady = true;
+    const room = user?.roomId ? rooms.get(user.roomId) : null;
+    const player = room ? findPlayer(room, user.playerId) : null;
+    if (player && !player.isAI) player.assetsReady = true;
+    if (room) {
+      if (room.status === "playing" || room.status === "finished") emitGameState(room);
+      else emitRoomState(room);
+    }
+    emitLobbyState(socket);
+  });
+
   socket.on("startTutorial", () => {
     const user = getCurrentUser(socket);
     if (!user || user.roomId) return;
+    if (!user.assetsReady) {
+      socket.emit("errorMessage", ASSETS_NOT_READY_MESSAGE);
+      return;
+    }
 
     const room = {
       id: `tutorial${roomSequence++}`,
@@ -2202,6 +2230,10 @@ io.on("connection", (socket) => {
   socket.on("startGame", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
+    if (!getHumanPlayers(room).every((entry) => entry.assetsReady)) {
+      socket.emit("errorMessage", ASSETS_NOT_READY_MESSAGE);
+      return;
+    }
     if (!canStartGame(room)) {
       socket.emit("errorMessage", "게임 시작 조건: 총 2명 이상");
       return;
@@ -2212,6 +2244,10 @@ io.on("connection", (socket) => {
   socket.on("flipCard", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.isAI) return;
+    if (!player.assetsReady) {
+      socket.emit("errorMessage", ASSETS_NOT_READY_MESSAGE);
+      return;
+    }
     handleFlipCard(room, player);
   });
 

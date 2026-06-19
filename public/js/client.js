@@ -13,8 +13,7 @@ const CARD_BACK_ASSET = "/assets/cards/back.png";
 const VICTORY_SOUND_ASSET = "/assets/sounds/victory.mp3";
 const BELL_SOUND_ASSET = "/assets/sounds/bell.mp3";
 const BELL_IMAGE_ASSET = "/assets/bell/bell.png";
-const BELL_IMAGE_VERSION = "2";
-const BELL_IMAGE_URL = `${BELL_IMAGE_ASSET}?v=${BELL_IMAGE_VERSION}`;
+const BELL_IMAGE_URL = BELL_IMAGE_ASSET;
 const HIDDEN_USERS_KEY = "babyblue-hidden-users";
 const BGM_MODE_KEY = "bgmMode";
 const LOBBY_GUIDE_COLLAPSED_KEY = "lobbyGuideCollapsed";
@@ -40,6 +39,14 @@ const CARD_COLORS = {
   nunyo: "#fff1b8",
   nano: "#d9faed",
   ruchel: "#dceeff",
+};
+const CHARACTER_FALLBACK_LABELS = {
+  seolhong: "설홍",
+  yeowooyeon: "우연",
+  choiaeri: "애리",
+  nunyo: "눈요",
+  nano: "나노",
+  ruchel: "루첼",
 };
 const AI_DIFFICULTY_LABELS = {
   beginner: "초급",
@@ -74,6 +81,9 @@ const state = {
   mobileInfoRoomId: null,
   spectatorOverlayDismissedFor: null,
   latency: { value: null, state: "measuring" },
+  assetsReady: false,
+  assetsLoading: false,
+  assetLoadFailures: [],
   tutorial: {
     active: false,
     stepIndex: 0,
@@ -82,6 +92,8 @@ const state = {
     seenCardId: null,
   },
 };
+
+window.assetsReady = false;
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -271,10 +283,17 @@ function isBellAvailable(game = state.game) {
 }
 
 function isFlipAvailable(game = state.game) {
+  if (!state.assetsReady) return false;
   if (!isSelfAbleToAct(game)) return false;
   const self = getSelfPlayer(game);
   if (self?.id !== game.currentTurnPlayerId) return false;
   return Date.now() >= Number(game.nextFlipAllowedAt || 0);
+}
+
+async function requestFlipCard() {
+  await ensureAssetsReady();
+  if (!isFlipAvailable()) return;
+  socket.emit("flipCard");
 }
 
 function clearFlipAvailabilityTimer() {
@@ -423,8 +442,10 @@ const AUDIO_PRELOAD_URLS = [
 const bgm = new Audio();
 bgm.preload = "auto";
 const preloadedAudio = new Map();
-const preloadedImages = new Map();
+const imageCache = new Map();
+const failedImageUrls = new Set();
 const imagePreloadPromises = new Map();
+let requiredAssetsPromise = null;
 let bgmIndex = 0;
 let currentBgmMode = "all";
 let userGestureSeen = false;
@@ -488,23 +509,44 @@ function applySfxVolume(value) {
   $("#sfxVolumeValue").textContent = String(volume);
 }
 
+function setAssetLoading(visible) {
+  state.assetsLoading = visible;
+  const overlay = $("#assetLoadingOverlay");
+  if (!overlay) return;
+  overlay.classList.toggle("hidden", !visible);
+}
+
+function emitClientAssetsReady() {
+  if (!state.assetsReady || !socket.connected) return;
+  socket.emit("clientAssetsReady", { failed: state.assetLoadFailures });
+}
+
 function preloadImage(url) {
-  if (!url) return Promise.resolve(false);
-  const cached = preloadedImages.get(url);
-  if (cached?.loaded) return Promise.resolve(true);
+  if (!url) return Promise.resolve({ src: "", ok: false, img: null });
+  const cached = imageCache.get(url);
+  if (cached) return Promise.resolve({ src: url, ok: true, img: cached });
+  if (failedImageUrls.has(url)) return Promise.resolve({ src: url, ok: false, img: null });
   if (imagePreloadPromises.has(url)) return imagePreloadPromises.get(url);
 
   const img = new Image();
   img.decoding = "async";
   img.loading = "eager";
   const promise = new Promise((resolve) => {
-    img.addEventListener("load", () => {
-      preloadedImages.set(url, { loaded: true, img });
-      resolve(true);
+    img.addEventListener("load", async () => {
+      if (typeof img.decode === "function") {
+        try {
+          await img.decode();
+        } catch {
+          // The load event is still enough to use the image; fallback stays available if paint fails.
+        }
+      }
+      imageCache.set(url, img);
+      resolve({ src: url, ok: true, img });
     }, { once: true });
     img.addEventListener("error", () => {
-      preloadedImages.set(url, { loaded: false, img: null });
-      resolve(false);
+      failedImageUrls.add(url);
+      console.warn(`[assets] 이미지 로드 실패: ${url}`);
+      resolve({ src: url, ok: false, img: null });
     }, { once: true });
   });
   imagePreloadPromises.set(url, promise);
@@ -513,19 +555,47 @@ function preloadImage(url) {
 }
 
 function isImagePreloaded(url) {
-  return preloadedImages.get(url)?.loaded === true;
+  return imageCache.has(url);
 }
 
 function preloadCardImages(card) {
-  for (const item of card?.items || []) {
-    preloadImage(CHARACTER_ASSETS[item.characterId]);
-  }
+  const urls = [...new Set((card?.items || [])
+    .map((item) => CHARACTER_ASSETS[item.characterId])
+    .filter(Boolean))];
+  return Promise.all(urls.map(preloadImage));
+}
+
+function preloadRequiredAssets() {
+  if (state.assetsReady) return Promise.resolve([]);
+  if (requiredAssetsPromise) return requiredAssetsPromise;
+
+  setAssetLoading(true);
+  requiredAssetsPromise = Promise.all(IMAGE_PRELOAD_URLS.map(preloadImage))
+    .then((results) => {
+      const failures = results.filter((result) => !result.ok).map((result) => result.src);
+      state.assetsReady = true;
+      state.assetLoadFailures = failures;
+      window.assetsReady = true;
+      if (failures.length) console.warn("[assets] fallback 사용:", failures);
+      emitClientAssetsReady();
+      if (state.room) renderRoom(state.room);
+      if (state.game) renderGame(state.game);
+      return results;
+    })
+    .finally(() => {
+      setAssetLoading(false);
+    });
+  return requiredAssetsPromise;
+}
+
+async function ensureAssetsReady() {
+  if (state.assetsReady) return true;
+  await preloadRequiredAssets();
+  return state.assetsReady;
 }
 
 function preloadAssets() {
-  for (const url of IMAGE_PRELOAD_URLS) {
-    preloadImage(url);
-  }
+  preloadRequiredAssets();
 
   for (const url of AUDIO_PRELOAD_URLS) {
     const audio = new Audio();
@@ -967,8 +1037,9 @@ function renderTutorialOverlay(game = state.game) {
   overlay.classList.remove("hidden");
 }
 
-function advanceTutorialStep() {
+async function advanceTutorialStep() {
   if (!state.tutorial.active) return;
+  await ensureAssetsReady();
   clearTutorialAdvanceTimer();
   const current = getTutorialStep();
   state.tutorial.stepIndex = Math.min(state.tutorial.stepIndex + 1, TUTORIAL_STEPS.length - 1);
@@ -978,8 +1049,9 @@ function advanceTutorialStep() {
   renderTutorialOverlay(state.game);
 }
 
-function goBackTutorialStep() {
+async function goBackTutorialStep() {
   if (!state.tutorial.active || state.tutorial.stepIndex <= 0) return;
+  await ensureAssetsReady();
   clearTutorialAdvanceTimer();
   state.tutorial.stepIndex = Math.max(0, state.tutorial.stepIndex - 1);
   state.tutorial.preparedStep = null;
@@ -1078,6 +1150,7 @@ function renderRoom(room) {
         ${player.isHost ? `<span class="badge host">방장</span>` : ""}
         ${player.isAI ? `<span class="badge ai">[AI]</span>` : ""}
         ${player.isAI ? `<span class="badge ai-difficulty-badge">AI ${aiDifficultyLabel(room.aiDifficulty)}</span>` : ""}
+        ${player.isAI ? "" : `<span class="badge ${player.assetsReady ? "ready" : "not-ready"}">${player.assetsReady ? "[이미지 준비]" : "[이미지 로딩]"}</span>`}
         <span class="badge ${player.ready ? "ready" : "not-ready"}">${player.ready ? "[준비]" : "[미준비]"}</span>
       </div>
     `;
@@ -1088,8 +1161,10 @@ function renderRoom(room) {
   $("#readyButton").disabled = !self;
   $("#addAIButton").disabled = !isHost || room.status !== "waiting" || room.players.length >= room.maxPlayers || allHumansReady;
   $("#removeAIButton").disabled = !isHost || !room.players.some((player) => player.isAI);
-  $("#startGameButton").disabled = !isHost || !room.canStart;
-  $("#roomHint").textContent = "게임 시작 조건: 총 2명 이상";
+  $("#startGameButton").disabled = !isHost || !room.canStart || !state.assetsReady;
+  $("#roomHint").textContent = state.assetsReady
+    ? "게임 시작 조건: 총 2명 이상"
+    : "이미지 로딩이 끝나면 게임을 시작할 수 있습니다";
 }
 
 function getSeatPosition(index, count) {
@@ -1225,7 +1300,7 @@ function syncDeckCard(deckSlot, canFlip, visible) {
   }
   deck.classList.toggle("clickable", canFlip);
   deck.disabled = !canFlip;
-  deck.onclick = canFlip ? () => socket.emit("flipCard") : null;
+  deck.onclick = canFlip ? () => requestFlipCard() : null;
 }
 
 function syncPileCard(pileSlot, card, highlight) {
@@ -1425,7 +1500,7 @@ function shouldIgnoreMobileGameTouch(event) {
   ].join(",")));
 }
 
-function handleMobileGameBoardTouch(event) {
+async function handleMobileGameBoardTouch(event) {
   if (shouldIgnoreMobileGameTouch(event)) return;
   const now = Date.now();
   if (now - mobileTouchLastAt < 300) return;
@@ -1447,7 +1522,7 @@ function handleMobileGameBoardTouch(event) {
   if (isFlipAvailable()) {
     mobileTouchLastAt = now;
     event.preventDefault();
-    socket.emit("flipCard");
+    await requestFlipCard();
   }
 }
 
@@ -1519,6 +1594,7 @@ function renderFrontCard(card, highlight = []) {
     const fallback = document.createElement("div");
     fallback.className = "character-fallback";
     fallback.setAttribute("aria-hidden", "true");
+    fallback.textContent = CHARACTER_FALLBACK_LABELS[item.characterId] || "?";
     const image = document.createElement("img");
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
@@ -1530,8 +1606,8 @@ function renderFrontCard(card, highlight = []) {
     image.src = imageUrl;
     piece.replaceChildren(fallback, image);
     if (isImagePreloaded(imageUrl)) piece.classList.add("image-loaded");
-    preloadImage(imageUrl).then((loaded) => {
-      if (loaded) piece.classList.add("image-loaded");
+    preloadImage(imageUrl).then((result) => {
+      if (result.ok) piece.classList.add("image-loaded");
     });
     image.addEventListener("load", () => {
       piece.classList.add("image-loaded");
@@ -1735,8 +1811,9 @@ $("#nicknameForm").addEventListener("submit", (event) => {
 
 $("#openCreateRoomButton").addEventListener("click", openCreateRoomModal);
 $("#guideToggleButton")?.addEventListener("click", toggleLobbyGuide);
-$("#tutorialButton")?.addEventListener("click", () => {
+$("#tutorialButton")?.addEventListener("click", async () => {
   closeSettingsPanel();
+  await ensureAssetsReady();
   resetTutorialState(true);
   socket.emit("startTutorial");
 });
@@ -1819,7 +1896,10 @@ $("#removeAIButton").addEventListener("click", () => socket.emit("removeAI"));
 $("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
   socket.emit("setAIDifficulty", { aiDifficulty: event.target.value });
 });
-$("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
+$("#startGameButton").addEventListener("click", async () => {
+  await ensureAssetsReady();
+  socket.emit("startGame");
+});
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
 $("#tutorialBackButton")?.addEventListener("click", goBackTutorialStep);
@@ -2033,6 +2113,7 @@ socket.on("reconnectResult", (payload) => {
 
 socket.on("connect", () => {
   startLatencyMonitor();
+  emitClientAssetsReady();
   if (state.nickname && state.activeScreen !== "nickname") {
     socket.emit("joinLobby", { nickname: state.nickname });
   }
