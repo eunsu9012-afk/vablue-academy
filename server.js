@@ -21,6 +21,7 @@ const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
+const CARD_REVEAL_HOLD_MS = 600;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
 const AI_FLIP_EXTRA_DELAY_MAX_MS = 400;
 const BASE_PENALTY = 5;
@@ -853,9 +854,11 @@ function clearRoomTimers(room) {
   if (room.game.resultTimer) clearTimeout(room.game.resultTimer);
   if (room.game.turnTimer) clearTimeout(room.game.turnTimer);
   if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
+  if (room.game.revealTimer) clearTimeout(room.game.revealTimer);
   room.game.resultTimer = null;
   room.game.turnTimer = null;
   room.game.roundTimer = null;
+  room.game.revealTimer = null;
 }
 
 function randomInt(min, max) {
@@ -967,6 +970,18 @@ function cloneCardForOpenPile(card) {
 
 function createDeck(room) {
   return Array.from({ length: PRIVATE_DECK_SIZE }, () => generateRandomCard(room.mode));
+}
+
+function replenishPlayerDeck(room, player) {
+  if (!room || !player || player.spectator) return null;
+  if (!Array.isArray(player.deck)) player.deck = [];
+  let newestCard = null;
+  while (player.deck.length < PRIVATE_DECK_SIZE) {
+    newestCard = generateRandomCard(room.mode);
+    player.deck.push(newestCard);
+  }
+  player.deckCount = player.deck.length;
+  return newestCard;
 }
 
 function generateSingleCharacterCard() {
@@ -1295,8 +1310,14 @@ function clearTurnTimer(room) {
   if (room?.game) room.game.turnTimer = null;
 }
 
+function clearRevealTimer(room) {
+  if (room?.game?.revealTimer) clearTimeout(room.game.revealTimer);
+  if (room?.game) room.game.revealTimer = null;
+}
+
 function setCurrentTurn(room, playerId) {
   if (!room?.game || !playerId) return;
+  clearRevealTimer(room);
   clearTurnTimer(room);
   const now = Date.now();
   const turnDurationMs = getTurnDurationMs(room);
@@ -1518,6 +1539,7 @@ function beginGame(room) {
     recentReactionSpeeds: [],
     resultVisible: false,
     resultTimer: null,
+    revealTimer: null,
     roundTimer: null,
   };
   if (room.isTutorial) {
@@ -1536,36 +1558,64 @@ function beginGame(room) {
 function handleFlipCard(room, player) {
   if (!room || room.status !== "playing" || !room.game) return false;
   if (room.game.bellLocked) return false;
+  if (room.game.revealTimer) return false;
   if (!player || player.spectator || player.eliminated) return false;
   if (!player.isAI && !player.assetsReady) return false;
   if (room.game.currentTurnPlayerId !== player.id) return false;
   if (Date.now() < Number(room.game.nextFlipAllowedAt || 0)) return false;
 
   if (!Array.isArray(player.deck) || player.deck.length === 0) {
-    player.deck = createDeck(room);
+    replenishPlayerDeck(room, player);
   }
   const deckCard = player.deck.shift();
+  if (!deckCard) return false;
   const openedCard = cloneCardForOpenPile(deckCard);
   player.faceUpCards.push(openedCard);
-  const replacementCard = generateRandomCard(room.mode);
-  player.deck.push(replacementCard);
   player.deckCount = player.deck.length;
-  room.game.lastCardOpenedAt = Date.now();
+  const openedAt = Date.now();
+  const nextPlayerId = room.isTutorial && room.tutorialPhase !== "practice"
+    ? player.id
+    : nextAlivePlayerId(room, player.id);
+  clearTurnTimer(room);
+  room.game.currentTurnPlayerId = null;
+  room.game.turnStartedAt = openedAt;
+  room.game.turnEndsAt = 0;
+  room.game.nextFlipAllowedAt = openedAt + CARD_REVEAL_HOLD_MS + TURN_START_DELAY_MS;
+  room.game.turnSerial = (room.game.turnSerial || 0) + 1;
+  room.game.lastCardOpenedAt = openedAt;
   room.game.lastOpenedCardId = openedCard.cardId;
   room.game.tableVersion += 1;
+  const revealVersion = room.game.tableVersion;
   updateCorrectConditionWindow(room);
-  if (room.isTutorial && room.tutorialPhase !== "practice") {
-    setTutorialInstructionTurn(room, player.id);
-  } else {
-    setCurrentTurn(room, nextAlivePlayerId(room, player.id));
-  }
   logEvent(
     "flip",
-    `player=${player.nickname} openedCardId=${openedCard.cardId} replacementCardId=${replacementCard.cardId} deckSize=${player.deck.length} counts=${JSON.stringify(openedCard.counts)}`,
+    `player=${player.nickname} openedCardId=${openedCard.cardId} deckSize=${player.deck.length} counts=${JSON.stringify(openedCard.counts)}`,
   );
   verifyOpenPileStability(room, openedCard.cardId);
   emitGameState(room);
-  if (!room.isTutorial || room.tutorialPhase === "practice") scheduleAI(room);
+  if (!room.isTutorial || room.tutorialPhase === "practice") scheduleAIBell(room);
+
+  room.game.revealTimer = setTimeout(() => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom?.game || liveRoom.status !== "playing") return;
+    liveRoom.game.revealTimer = null;
+    if (liveRoom.game.bellLocked || liveRoom.game.tableVersion !== revealVersion) return;
+    const livePlayer = findPlayer(liveRoom, player.id);
+    const replacementCard = replenishPlayerDeck(liveRoom, livePlayer);
+    if (replacementCard && livePlayer) {
+      logEvent("deck replenished", `player=${livePlayer.nickname} cardId=${replacementCard.cardId} deckSize=${livePlayer.deck.length}`);
+    }
+    const nextPlayer = nextPlayerId ? findPlayer(liveRoom, nextPlayerId) : null;
+    if (nextPlayer && !nextPlayer.spectator && !nextPlayer.eliminated) {
+      if (liveRoom.isTutorial && liveRoom.tutorialPhase !== "practice") {
+        setTutorialInstructionTurn(liveRoom, nextPlayerId);
+      } else {
+        setCurrentTurn(liveRoom, nextPlayerId);
+      }
+      emitGameState(liveRoom);
+      if (!liveRoom.isTutorial || liveRoom.tutorialPhase === "practice") scheduleAI(liveRoom);
+    }
+  }, CARD_REVEAL_HOLD_MS);
   return true;
 }
 
@@ -1603,6 +1653,7 @@ function handleBell(room, bellRinger) {
   }
 
   clearTurnTimer(room);
+  clearRevealTimer(room);
   room.game.bellLocked = true;
   const verdict = evaluateBell(room);
   room.game.matchedCharacters = verdict.correct ? verdict.matchedCharacters : [];

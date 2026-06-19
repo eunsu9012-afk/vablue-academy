@@ -213,6 +213,7 @@ function showScreen(name) {
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
   if (name !== "game") {
+    document.body.classList.remove("is-tutorial-game");
     stopTurnTimer();
     clearFlipAvailabilityTimer();
     setText("#turnTimer", "--");
@@ -320,29 +321,16 @@ function scheduleFlipAvailabilityRefresh(game = state.game) {
 function updateMobileTouchHint(game = state.game) {
   const hint = $("#mobileTouchHint");
   if (!hint) return;
-  if (!game?.isTutorial || !isMobileMode() || state.activeScreen !== "game" || game.resultVisible) {
+  if (!isMobileMode() || state.activeScreen !== "game" || game?.resultVisible) {
     hint.classList.add("hidden");
-    hint.textContent = "";
+    hint.replaceChildren();
     return;
   }
-  const tutorialStep = getTutorialStep();
-  if (tutorialStep?.waitingFor === "correctBell" || tutorialStep?.waitingFor === "wrongBell") {
-    hint.textContent = "화면을 터치해서 종을 치세요";
-    hint.classList.remove("hidden");
-    return;
-  }
-  if (isBellAvailable(game)) {
-    hint.textContent = "화면을 터치해서 종을 치세요";
-    hint.classList.remove("hidden");
-    return;
-  }
-  if (isFlipAvailable(game)) {
-    hint.textContent = "화면을 터치해서 카드를 뒤집으세요";
-    hint.classList.remove("hidden");
-    return;
-  }
-  hint.classList.add("hidden");
-  hint.textContent = "";
+  hint.innerHTML = `
+    <span class="mobile-bell-guide">← 종을 터치</span>
+    <span class="mobile-open-guide">화면 터치시 카드 오픈 →</span>
+  `;
+  hint.classList.remove("hidden");
 }
 
 function updateMobileGameInfoPanel() {
@@ -556,6 +544,20 @@ function preloadImage(url) {
 
 function isImagePreloaded(url) {
   return imageCache.has(url);
+}
+
+function createCachedCardImage(url) {
+  const cached = imageCache.get(url);
+  const image = cached ? cached.cloneNode(false) : document.createElement("img");
+  image.alt = "";
+  image.setAttribute("aria-hidden", "true");
+  image.decoding = "sync";
+  image.loading = "eager";
+  image.draggable = false;
+  image.width = 256;
+  image.height = 256;
+  if (!image.src) image.src = url;
+  return { image, loaded: Boolean(cached) };
 }
 
 function preloadCardImages(card) {
@@ -1032,7 +1034,8 @@ function renderTutorialOverlay(game = state.game) {
     backButton.classList.toggle("hidden", false);
   }
   nextButton.textContent = step.nextText || "다음";
-  nextButton.classList.toggle("hidden", Boolean(step.waitingFor || step.practice));
+  nextButton.disabled = state.tutorial.stepIndex >= TUTORIAL_STEPS.length - 1;
+  nextButton.classList.toggle("hidden", false);
   completeButton.classList.toggle("hidden", false);
   overlay.classList.remove("hidden");
 }
@@ -1068,37 +1071,12 @@ function syncTutorialWithGame(game) {
   }
   if (!state.tutorial.active) resetTutorialState(true);
 
-  const step = getTutorialStep();
-  if (step?.waitingFor === "flip") {
-    const self = getSelfPlayer(game);
-    const currentCardId = cardIdentity(self?.topCard);
-    if (currentCardId && currentCardId !== state.tutorial.seenCardId) {
-      advanceTutorialStep();
-      return;
-    }
-  }
-  if (step?.waitingFor === "aiFlip") {
-    const ai = getTutorialAIPlayer(game);
-    const currentCardId = cardIdentity(ai?.topCard);
-    if (currentCardId && currentCardId !== state.tutorial.seenCardId) {
-      advanceTutorialStep();
-      return;
-    }
-  }
   renderTutorialOverlay(game);
 }
 
 function handleTutorialBellResult(payload) {
   if (!state.tutorial.active || !state.game?.isTutorial) return false;
-  const step = getTutorialStep();
-  if (step?.waitingFor === "correctBell" && payload?.correct) {
-    scheduleTutorialAdvance(700);
-    return true;
-  }
-  if (step?.waitingFor === "wrongBell" && !payload?.correct) {
-    scheduleTutorialAdvance(700);
-    return true;
-  }
+  void payload;
   return false;
 }
 
@@ -1156,6 +1134,17 @@ function renderRoom(room) {
     `;
     playerList.appendChild(item);
   }
+  for (let index = room.players.length; index < 6; index += 1) {
+    const item = document.createElement("article");
+    item.className = "waiting-player empty-slot";
+    item.innerHTML = `
+      <h3>빈 자리</h3>
+      <div class="badge-row">
+        <span class="badge not-ready">대기</span>
+      </div>
+    `;
+    playerList.appendChild(item);
+  }
 
   $("#readyButton").textContent = self?.ready ? "준비 취소" : "준비";
   $("#readyButton").disabled = !self;
@@ -1182,12 +1171,12 @@ function getSeatPosition(index, count) {
 
 function getMobileSeatPosition(index, count) {
   const layouts = {
-    1: [{ left: 50, top: 82 }],
-    2: [{ left: 50, top: 20 }, { left: 50, top: 81 }],
-    3: [{ left: 50, top: 18 }, { left: 29, top: 78 }, { left: 71, top: 78 }],
-    4: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 29, top: 80 }, { left: 71, top: 80 }],
-    5: [{ left: 29, top: 17 }, { left: 71, top: 17 }, { left: 29, top: 68 }, { left: 71, top: 68 }, { left: 50, top: 87 }],
-    6: [{ left: 29, top: 16 }, { left: 71, top: 16 }, { left: 29, top: 67 }, { left: 71, top: 67 }, { left: 29, top: 87 }, { left: 71, top: 87 }],
+    1: [{ left: 50, top: 74 }],
+    2: [{ left: 50, top: 25 }, { left: 50, top: 78 }],
+    3: [{ left: 50, top: 23 }, { left: 29, top: 78 }, { left: 71, top: 78 }],
+    4: [{ left: 29, top: 24 }, { left: 71, top: 24 }, { left: 29, top: 78 }, { left: 71, top: 78 }],
+    5: [{ left: 29, top: 22 }, { left: 71, top: 22 }, { left: 29, top: 74 }, { left: 71, top: 74 }, { left: 50, top: 86 }],
+    6: [{ left: 29, top: 21 }, { left: 71, top: 21 }, { left: 29, top: 72 }, { left: 71, top: 72 }, { left: 29, top: 86 }, { left: 71, top: 86 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 82 };
 }
@@ -1338,6 +1327,7 @@ function renderGame(game) {
     state.mobileGameInfoExpanded = false;
   }
   showScreen("game");
+  document.body.classList.toggle("is-tutorial-game", Boolean(game.isTutorial));
   startBgmWhenAllowed();
   updateMobileMode();
   updateResponsiveSizes();
@@ -1400,6 +1390,7 @@ function renderGameInfoPanel(game) {
   renderReactionSpeeds(game.recentReactionSpeeds || []);
   renderGameUsers(game.players || []);
   renderLatency();
+  renderMobileBoardStats(game);
 }
 
 function renderReactionSpeeds(rows) {
@@ -1445,21 +1436,42 @@ function renderGameUsers(players) {
 
 function renderLatency() {
   const element = $("#serverLatencyValue");
-  if (!element) return;
-  element.classList.remove("latency-good", "latency-warn", "latency-bad", "latency-measuring");
+  const mobileElement = $("#mobileLatencyValue");
+  if (!element && !mobileElement) return;
+  const applyLatencyClass = (target, className) => {
+    if (!target) return;
+    target.classList.remove("latency-good", "latency-warn", "latency-bad", "latency-measuring");
+    target.classList.add(className);
+  };
   if (state.latency.state === "unstable") {
-    element.textContent = "불안정";
-    element.classList.add("latency-bad");
+    if (element) element.textContent = "불안정";
+    if (mobileElement) mobileElement.textContent = "불안정";
+    applyLatencyClass(element, "latency-bad");
+    applyLatencyClass(mobileElement, "latency-bad");
     return;
   }
   if (!Number.isFinite(state.latency.value)) {
-    element.textContent = "측정 중";
-    element.classList.add("latency-measuring");
+    if (element) element.textContent = "측정 중";
+    if (mobileElement) mobileElement.textContent = "측정 중";
+    applyLatencyClass(element, "latency-measuring");
+    applyLatencyClass(mobileElement, "latency-measuring");
     return;
   }
   const value = Math.round(state.latency.value);
-  element.textContent = `${value}ms`;
-  element.classList.add(value <= 80 ? "latency-good" : value <= 150 ? "latency-warn" : "latency-bad");
+  const className = value <= 80 ? "latency-good" : value <= 150 ? "latency-warn" : "latency-bad";
+  if (element) element.textContent = `${value}ms`;
+  if (mobileElement) mobileElement.textContent = `${value}ms`;
+  applyLatencyClass(element, className);
+  applyLatencyClass(mobileElement, className);
+}
+
+function renderMobileBoardStats(game = state.game) {
+  const reaction = $("#mobileReactionTop");
+  if (!reaction) return;
+  const top = game?.recentReactionSpeeds?.[0];
+  reaction.textContent = top
+    ? `${formatReactionPlayerName(top)} ${(Number(top.reactionMs || 0) / 1000).toFixed(3)}s`
+    : "-";
 }
 
 function sendLatencyPing() {
@@ -1595,17 +1607,9 @@ function renderFrontCard(card, highlight = []) {
     fallback.className = "character-fallback";
     fallback.setAttribute("aria-hidden", "true");
     fallback.textContent = CHARACTER_FALLBACK_LABELS[item.characterId] || "?";
-    const image = document.createElement("img");
-    image.alt = "";
-    image.setAttribute("aria-hidden", "true");
-    image.decoding = "async";
-    image.loading = "eager";
-    image.draggable = false;
-    image.width = 256;
-    image.height = 256;
-    image.src = imageUrl;
+    const { image, loaded } = createCachedCardImage(imageUrl);
+    if (loaded) piece.classList.add("image-loaded");
     piece.replaceChildren(fallback, image);
-    if (isImagePreloaded(imageUrl)) piece.classList.add("image-loaded");
     preloadImage(imageUrl).then((result) => {
       if (result.ok) piece.classList.add("image-loaded");
     });
@@ -2025,8 +2029,9 @@ socket.on("roomState", (payload) => {
   renderRoom(payload);
 });
 
-socket.on("gameState", (payload) => {
+socket.on("gameState", async (payload) => {
   if (!payload) return;
+  await ensureAssetsReady();
   renderGame(payload);
 });
 
@@ -2055,10 +2060,6 @@ socket.on("timeoutResult", (payload) => {
   const name = payload.playerDisplayName || payload.playerName;
   showScoreDeltas(payload.scoreChanges);
   showToast(`${name} 시간초과! -${payload.penalty}점`);
-  const step = getTutorialStep();
-  if (state.tutorial.active && state.game?.isTutorial && step?.waitingFor === "timeout") {
-    scheduleTutorialAdvance(900);
-  }
 });
 
 socket.on("latencyPong", (payload) => {
