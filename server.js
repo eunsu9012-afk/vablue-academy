@@ -187,7 +187,7 @@ async function ensureStats(nickname) {
 
 async function getStats(nickname) {
   if (!nickname) return { wins: 0, losses: 0, winRate: 0 };
-  await ensureStats(nickname);
+  if (!userdata.users[nickname]) return { wins: 0, losses: 0, winRate: 0 };
   const record = normalizeStatRecord(userdata.users[nickname]);
   userdata.users[nickname] = record;
   return { wins: record.wins, losses: record.losses, winRate: record.winRate };
@@ -379,6 +379,9 @@ function getTurnTime(room) {
 }
 
 function getTurnDurationMs(room) {
+  if (room?.isTutorial && Number.isFinite(Number(room.tutorialTurnDurationMs))) {
+    return Math.max(1000, Math.trunc(Number(room.tutorialTurnDurationMs)));
+  }
   return getTurnTime(room) * 1000;
 }
 
@@ -538,7 +541,7 @@ function serializeGame(room, selfPlayerId = null) {
     title: room.title,
     mode: room.mode,
     penaltyMultiplier: getPenaltyMultiplier(room),
-    turnTime: getTurnTime(room),
+    turnTime: Math.round(getTurnDurationMs(room) / 1000),
     aiDifficulty: getAIDifficulty(room),
     aiDifficultyLabel: getAIDifficultySettings(room).label,
     isTutorial: Boolean(room.isTutorial),
@@ -920,6 +923,30 @@ function createFixedSingleCharacterCard(characterId, count) {
     slots.map((slot) => ({ characterId: safeCharacter, slot })),
     { [safeCharacter]: safeCount },
   );
+}
+
+function createFixedMixedCharacterCard(entries = []) {
+  const normalized = [];
+  for (const entry of entries) {
+    const characterId = CHARACTER_IDS.includes(entry?.characterId) ? entry.characterId : null;
+    const count = Math.max(0, Math.trunc(Number(entry?.count) || 0));
+    if (!characterId || count <= 0) continue;
+    normalized.push({ characterId, count });
+  }
+  const totalCount = Math.min(5, normalized.reduce((sum, entry) => sum + entry.count, 0));
+  const slots = [1, 2, 3, 4, 5].slice(0, totalCount);
+  const items = [];
+  const counts = {};
+  let used = 0;
+  for (const entry of normalized) {
+    for (let i = 0; i < entry.count && used < totalCount; i += 1) {
+      const slot = slots[used++];
+      items.push({ characterId: entry.characterId, slot });
+      counts[entry.characterId] = (counts[entry.characterId] || 0) + 1;
+    }
+  }
+  const type = Object.keys(counts).length <= 1 ? "single" : Object.keys(counts).length === 2 ? "double" : "triple";
+  return createCard(type, items, counts);
 }
 
 function cloneCardForOpenPile(card) {
@@ -1306,22 +1333,8 @@ function resetTutorialPlayers(room, { humanScore = 100, aiScore = 100 } = {}) {
   return { human, ai };
 }
 
-function setTutorialScenario(room, scenario) {
-  if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
-  room.tutorialPhase = "guide";
-  clearRoomTimers(room);
-  const { human, ai } = resetTutorialPlayers(room);
-  if (!human) return false;
-
-  if (scenario === "correctBell") {
-    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 5)];
-  } else if (scenario === "wrongBell") {
-    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 4)];
-  } else {
-    return false;
-  }
-
-  if (ai) ai.faceUpCards = [];
+function resetTutorialGameFlags(room) {
+  if (!room?.game) return;
   room.game.bellLocked = false;
   room.game.matchedCharacters = [];
   room.game.wrongFlash = false;
@@ -1329,14 +1342,78 @@ function setTutorialScenario(room, scenario) {
   room.game.aiBellScheduledForVersion = -1;
   room.game.openPileFingerprints = {};
   room.game.lastCardOpenedAt = Date.now();
-  room.game.lastOpenedCardId = human.faceUpCards[0]?.cardId || null;
+  room.game.lastOpenedCardId = null;
   room.game.correctConditionStartedAt = null;
   room.game.correctConditionVersion = -1;
   room.game.collectingCorrectReactions = false;
   room.game.reactionPlayerIds = new Set();
   room.game.recentReactionSpeeds = [];
+}
+
+function setTutorialScenario(room, scenario) {
+  if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
+  room.tutorialPhase = "guide";
+  room.tutorialTurnDurationMs = null;
+  clearRoomTimers(room);
+  const { human, ai } = resetTutorialPlayers(room);
+  if (!human) return false;
+
+  if (scenario === "normalMode") {
+    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 3)];
+  } else if (scenario === "hardMode") {
+    human.faceUpCards = [createFixedMixedCharacterCard([
+      { characterId: "seolhong", count: 2 },
+      { characterId: "nunyo", count: 1 },
+      { characterId: "ruchel", count: 1 },
+    ])];
+  } else if (scenario === "aiTurn") {
+    if (!ai) return false;
+    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 3)];
+    ai.deck = [
+      createFixedSingleCharacterCard("seolhong", 2),
+      ...createDeck(room),
+    ];
+    ai.deckCount = ai.deck.length;
+  } else if (scenario === "correctBell") {
+    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 3)];
+    if (ai) ai.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
+  } else if (scenario === "wrongBell") {
+    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
+    if (ai) ai.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
+  } else {
+    return false;
+  }
+
+  if (ai && !["correctBell", "wrongBell"].includes(scenario)) ai.faceUpCards = [];
+  resetTutorialGameFlags(room);
+  room.game.lastOpenedCardId = human.faceUpCards[human.faceUpCards.length - 1]?.cardId || null;
   updateCorrectConditionWindow(room);
-  setTutorialInstructionTurn(room, human.id);
+  setTutorialInstructionTurn(room, scenario === "aiTurn" && ai ? ai.id : human.id);
+  emitGameState(room);
+  if (scenario === "aiTurn" && ai) {
+    const aiId = ai.id;
+    const tableVersion = room.game.tableVersion;
+    const timer = setTimeout(() => {
+      const liveRoom = rooms.get(room.id);
+      if (!liveRoom?.game || liveRoom.status !== "playing" || liveRoom.tutorialPhase !== "guide") return;
+      if (liveRoom.game.tableVersion !== tableVersion) return;
+      const liveAI = findPlayer(liveRoom, aiId);
+      handleFlipCard(liveRoom, liveAI);
+    }, 800);
+    pushAITimer(room, timer);
+  }
+  return true;
+}
+
+function startTutorialTimeout(room) {
+  if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
+  room.tutorialPhase = "timeout";
+  room.tutorialTurnDurationMs = 3000;
+  clearRoomTimers(room);
+  const { human } = resetTutorialPlayers(room, { humanScore: 90, aiScore: 100 });
+  if (!human) return false;
+  resetTutorialGameFlags(room);
+  setCurrentTurn(room, human.id);
   emitGameState(room);
   return true;
 }
@@ -1344,11 +1421,12 @@ function setTutorialScenario(room, scenario) {
 function startTutorialPractice(room) {
   if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
   room.tutorialPhase = "practice";
+  room.tutorialTurnDurationMs = null;
   clearRoomTimers(room);
   const { human, ai } = resetTutorialPlayers(room, { humanScore: 25, aiScore: 5 });
   if (!human) return false;
   human.deck = [
-    createFixedSingleCharacterCard("seolhong", 5),
+    createFixedSingleCharacterCard("seolhong", 3),
     createFixedSingleCharacterCard("nano", 2),
     createFixedSingleCharacterCard("ruchel", 3),
     ...createDeck(room),
@@ -1361,19 +1439,10 @@ function startTutorialPractice(room) {
       ...createDeck(room),
     ];
     ai.deckCount = ai.deck.length;
-    ai.faceUpCards = [createFixedSingleCharacterCard("yeowooyeon", 1)];
+    ai.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
   }
-  room.game.bellLocked = false;
-  room.game.matchedCharacters = [];
-  room.game.wrongFlash = false;
-  room.game.tableVersion += 1;
-  room.game.aiBellScheduledForVersion = -1;
-  room.game.openPileFingerprints = {};
-  room.game.correctConditionStartedAt = null;
-  room.game.correctConditionVersion = -1;
-  room.game.collectingCorrectReactions = false;
-  room.game.reactionPlayerIds = new Set();
-  room.game.recentReactionSpeeds = [];
+  resetTutorialGameFlags(room);
+  updateCorrectConditionWindow(room);
   setCurrentTurn(room, human.id);
   emitGameState(room);
   scheduleAI(room);
@@ -1612,6 +1681,13 @@ function handleTurnTimeout(room, playerId) {
       return;
     }
 
+    if (liveRoom.isTutorial && liveRoom.tutorialPhase !== "practice") {
+      liveRoom.tutorialTurnDurationMs = null;
+      setTutorialInstructionTurn(liveRoom, player.spectator ? nextAlivePlayerId(liveRoom, player.id) : player.id);
+      emitGameState(liveRoom);
+      return;
+    }
+
     setCurrentTurn(liveRoom, player.spectator ? nextAlivePlayerId(liveRoom, player.id) : player.id);
     emitGameState(liveRoom);
     scheduleAI(liveRoom);
@@ -1653,6 +1729,7 @@ function scheduleAIBell(room) {
   room.game.aiBellScheduledForVersion = room.game.tableVersion;
 
   const verdict = evaluateBell(room);
+  if (room.isTutorial && verdict.correct) return;
   const mistakeRisk = analyzeAIMistakeRisk(room, verdict);
   const difficulty = getAIDifficultySettings(room);
   const aiPlayers = getActivePlayers(room).filter((player) => player.isAI);
@@ -1813,7 +1890,6 @@ io.on("connection", (socket) => {
 
     if (existing && handleReconnect(socket, cleanNickname, existing)) return;
 
-    await ensureStats(cleanNickname);
     const user = {
       nickname: cleanNickname,
       displayName,
@@ -1860,6 +1936,7 @@ io.on("connection", (socket) => {
       statsEnabled: false,
       isTutorial: true,
       tutorialPhase: "guide",
+      tutorialTurnDurationMs: null,
       game: null,
       createdAt: Date.now(),
     };
@@ -1889,6 +1966,12 @@ io.on("connection", (socket) => {
     const { room } = getSocketRoomAndPlayer(socket);
     if (!room?.isTutorial) return;
     startTutorialPractice(room);
+  });
+
+  socket.on("startTutorialTimeout", () => {
+    const { room } = getSocketRoomAndPlayer(socket);
+    if (!room?.isTutorial) return;
+    startTutorialTimeout(room);
   });
 
   socket.on("completeTutorial", () => {

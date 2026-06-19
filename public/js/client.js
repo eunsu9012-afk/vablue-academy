@@ -97,65 +97,90 @@ const pendingLatencyPings = new Map();
 const TUTORIAL_STEPS = [
   {
     key: "menu",
-    label: "1 / 8",
+    label: "1 / 12",
     target: "menu",
     text: "우측 상단 메뉴에서\nBGM, 효과음, 설정을 변경할 수 있습니다.",
     nextText: "다음",
   },
   {
     key: "score",
-    label: "2 / 8",
+    label: "2 / 12",
     target: "score",
-    text: "점수가 0 이하가 되면 탈락합니다.",
+    text: "이 게임은 카드 수로 승부하지 않습니다.\n점수가 0 이하가 되면 탈락합니다.",
+    nextText: "다음",
+  },
+  {
+    key: "normalMode",
+    label: "3 / 12",
+    target: "openCard",
+    scenario: "normalMode",
+    text: "일반모드는 한 카드에 한 종류의 캐릭터만 등장합니다.\n예시는 설홍 3개 카드입니다.",
+    nextText: "다음",
+  },
+  {
+    key: "hardMode",
+    label: "4 / 12",
+    target: "openCard",
+    scenario: "hardMode",
+    text: "하드모드는 한 카드에 여러 종류의 캐릭터가 함께 등장합니다.\n설홍, 눈요, 루첼이 한 카드에 같이 보입니다.",
     nextText: "다음",
   },
   {
     key: "deck",
-    label: "3 / 8",
+    label: "5 / 12",
     target: "deck",
-    text: () => `자신의 차례가 되면\n카드를 공개합니다.\n\n${isMobileMode() ? "게임 화면을 터치하세요." : "카드덱을 클릭하세요."}`,
+    text: () => `카드는 자신의 차례에만 공개할 수 있습니다.\n지금은 내 차례입니다.\n\n${isMobileMode() ? "게임 화면을 터치하세요." : "카드덱을 클릭하세요."}`,
     waitingFor: "flip",
   },
   {
     key: "openCard",
-    label: "4 / 8",
+    label: "6 / 12",
     target: "openCard",
     text: "공개된 카드는\n모든 플레이어가 함께 보는 카드입니다.",
     nextText: "다음",
   },
   {
+    key: "aiTurn",
+    label: "7 / 12",
+    target: "aiOpenCard",
+    scenario: "aiTurn",
+    text: "AI 차례에는 AI가 카드를 공개합니다.\n종은 내 차례가 아니어도 조건이 맞으면 칠 수 있습니다.",
+    waitingFor: "aiFlip",
+  },
+  {
     key: "bell",
-    label: "5 / 8",
+    label: "8 / 12",
     target: "bell",
-    text: "전체 공개 카드에서\n같은 캐릭터가 정확히 5개가 되면\n종을 칩니다.",
+    text: () => `전체 공개 카드에서 설홍이 정확히 5개가 되었습니다.\n이제 종을 치세요.\n\n${isMobileMode() ? "게임 화면을 터치해서 종을 칠 수 있습니다." : "종을 클릭하거나 스페이스바를 눌러 종을 칠 수 있습니다."}`,
     waitingFor: "correctBell",
   },
   {
     key: "wrong",
-    label: "6 / 8",
+    label: "9 / 12",
     target: "bell",
-    text: "5개가 아닌데 종을 치면 감점됩니다.",
+    scenario: "wrongBell",
+    text: "아직 설홍이 4개입니다.\n5개가 아닌데 종을 치면 오답으로 감점됩니다.",
     waitingFor: "wrongBell",
   },
   {
-    key: "timer",
-    label: "7 / 8",
+    key: "timeout",
+    label: "10 / 12",
     target: "timer",
-    text: "제한시간 안에 행동해야 합니다.",
-    nextText: "다음",
+    text: "제한시간 안에 카드를 공개하지 않으면 감점됩니다.\n지금은 체험을 위해 잠시 기다려보세요.",
+    waitingFor: "timeout",
   },
   {
-    key: "win",
-    label: "8 / 8",
-    target: "board",
-    text: "마지막까지 살아남은 플레이어가 승리합니다.",
+    key: "scoreWin",
+    label: "11 / 12",
+    target: "score",
+    text: "오답과 시간초과로 점수가 줄어드는 것을 확인했습니다.\n탈락하면 직접 플레이는 할 수 없고 관전할 수 있습니다.\n마지막까지 살아남은 플레이어가 승리합니다.",
     nextText: "실전 체험",
   },
   {
     key: "practice",
-    label: "실전",
+    label: "12 / 12",
     target: "board",
-    text: "튜토리얼 AI와 짧게 실전 체험을 해보세요.",
+    text: "튜토리얼 AI와 짧게 실전 체험을 해보세요.\nAI 공개 카드와 내 공개 카드를 합쳐 정확히 5개인지 확인하세요.",
     practice: true,
   },
 ];
@@ -377,10 +402,12 @@ let skippedTracks = 0;
 let bgmSilent = false;
 
 function clampVolumeStep(value, fallback = 3) {
+  if (value === null || value === undefined || value === "") return fallback;
   const volume = Number(value);
   if (!Number.isFinite(volume)) return fallback;
-  const normalized = volume > 5 ? Math.round(volume / 20) : Math.round(volume);
-  return Math.min(5, Math.max(1, normalized));
+  const normalized = volume > 5 && volume <= 100 ? Math.round(volume / 20) : Math.round(volume);
+  if (normalized < 0 || normalized > 5) return fallback;
+  return normalized;
 }
 
 function getStoredBgmVolume() {
@@ -785,13 +812,24 @@ function getSelfZone(game = state.game) {
   return document.querySelector(`[data-player-id="${selfId}"]`);
 }
 
+function getTutorialAIPlayer(game = state.game) {
+  return game?.players?.find((player) => player.isAI) || null;
+}
+
+function getTutorialAIZone(game = state.game) {
+  const ai = getTutorialAIPlayer(game);
+  return ai ? document.querySelector(`[data-player-id="${ai.id}"]`) : null;
+}
+
 function getTutorialTarget(step, game = state.game) {
   if (!step) return null;
   const selfZone = getSelfZone(game);
+  const aiZone = getTutorialAIZone(game);
   if (step.target === "menu") return $("#settingsButton");
   if (step.target === "score") return selfZone?.querySelector(".score") || null;
   if (step.target === "deck") return selfZone?.querySelector(".deck-card") || null;
   if (step.target === "openCard") return selfZone?.querySelector(".pile-slot") || null;
+  if (step.target === "aiOpenCard") return aiZone?.querySelector(".pile-slot") || aiZone?.querySelector(".deck-card") || null;
   if (step.target === "bell") return $("#bellButton");
   if (step.target === "timer") return $("#turnTimer");
   if (step.target === "board") return $("#gameBoard");
@@ -817,7 +855,12 @@ function tutorialControlHint(step) {
       : "카드덱 클릭 → 카드 공개\n스페이스바 또는 종 클릭 → 종 치기";
   }
   if (step.waitingFor === "correctBell" || step.waitingFor === "wrongBell") {
-    return isMobileMode() ? "게임 화면을 터치해서 종을 치세요." : "스페이스바 또는 종을 클릭하세요.";
+    return isMobileMode()
+      ? "게임 화면을 터치해서 종을 칠 수 있습니다."
+      : "종을 클릭하거나 스페이스바를 눌러 종을 칠 수 있습니다.";
+  }
+  if (step.waitingFor === "timeout") {
+    return "아무것도 누르지 말고 타이머가 끝날 때까지 기다려보세요.";
   }
   return "";
 }
@@ -836,14 +879,18 @@ function prepareTutorialStep(step, game = state.game) {
     const self = getSelfPlayer(game);
     state.tutorial.seenCardId = cardIdentity(self?.topCard);
   }
-  if (step.key === "bell") {
-    socket.emit("setTutorialScenario", { scenario: "correctBell" });
+  if (step.key === "aiTurn") {
+    const ai = getTutorialAIPlayer(game);
+    state.tutorial.seenCardId = cardIdentity(ai?.topCard);
   }
-  if (step.key === "wrong") {
-    socket.emit("setTutorialScenario", { scenario: "wrongBell" });
+  if (step.scenario) {
+    socket.emit("setTutorialScenario", { scenario: step.scenario });
   }
   if (step.key === "practice") {
     socket.emit("startTutorialPractice");
+  }
+  if (step.key === "timeout") {
+    socket.emit("startTutorialTimeout");
   }
 }
 
@@ -891,6 +938,14 @@ function syncTutorialWithGame(game) {
   if (step?.waitingFor === "flip") {
     const self = getSelfPlayer(game);
     const currentCardId = cardIdentity(self?.topCard);
+    if (currentCardId && currentCardId !== state.tutorial.seenCardId) {
+      advanceTutorialStep();
+      return;
+    }
+  }
+  if (step?.waitingFor === "aiFlip") {
+    const ai = getTutorialAIPlayer(game);
+    const currentCardId = cardIdentity(ai?.topCard);
     if (currentCardId && currentCardId !== state.tutorial.seenCardId) {
       advanceTutorialStep();
       return;
@@ -1178,7 +1233,10 @@ function renderGame(game) {
     const isSelf = player.id === game.selfPlayerId;
     const canFlip = isSelf && !player.spectator && player.id === game.currentTurnPlayerId && !game.bellLocked;
 
-    zone.querySelector(".player-name").innerHTML = `${renderName(player)} ${renderHostBadge(player)}`;
+    const turnChip = player.id === game.currentTurnPlayerId
+      ? `<span class="current-turn-chip">${isSelf ? "내 차례" : "차례"}</span>`
+      : "";
+    zone.querySelector(".player-name").innerHTML = `${renderName(player)} ${renderHostBadge(player)} ${turnChip}`;
     zone.querySelector(".score").textContent = player.score;
 
     const deckSlot = zone.querySelector(".deck-slot");
@@ -1344,10 +1402,10 @@ function showScoreDeltas(changes = []) {
     const layer = zone?.querySelector(".score-delta-layer");
     if (!layer) continue;
     const badge = document.createElement("div");
-    badge.className = "score-delta";
+    badge.className = `score-delta ${change.delta > 0 ? "positive" : "negative"}`;
     badge.textContent = `${change.delta > 0 ? "+" : ""}${change.delta}`;
     layer.appendChild(badge);
-    setTimeout(() => badge.remove(), 950);
+    setTimeout(() => badge.remove(), 1100);
   }
 }
 
@@ -1492,11 +1550,11 @@ function updateGameOverlay(game) {
 function renderGameResult(result) {
   if (result.isTutorial) {
     return `
-      <div class="result-box">
+      <div class="result-box tutorial-result-box">
         <h2>튜토리얼 완료!</h2>
         <p class="hint-text">이제 실제 게임에 참가해보세요.</p>
         <div class="result-actions">
-          <button class="primary-button overlay-leave-button" type="button">대기실로 이동</button>
+          <button class="primary-button overlay-leave-button" type="button">튜토리얼 종료</button>
         </div>
       </div>
     `;
@@ -1849,6 +1907,10 @@ socket.on("timeoutResult", (payload) => {
   const name = payload.playerDisplayName || payload.playerName;
   showScoreDeltas(payload.scoreChanges);
   showToast(`${name} 시간초과! -${payload.penalty}점`);
+  const step = getTutorialStep();
+  if (state.tutorial.active && state.game?.isTutorial && step?.waitingFor === "timeout") {
+    setTimeout(advanceTutorialStep, 900);
+  }
 });
 
 socket.on("latencyPong", (payload) => {
