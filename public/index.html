@@ -183,13 +183,26 @@
               </button>
               <div id="mobileTouchHint" class="mobile-touch-hint hidden" aria-live="polite"></div>
               <div id="mobileBoardStats" class="mobile-board-stats" aria-live="polite">
-                <div>
-                  <span>최근 정답</span>
-                  <strong id="mobileReactionTop">-</strong>
+                <div class="mobile-board-summary">
+                  <div>
+                    <span>최근 정답 TOP1</span>
+                    <strong id="mobileReactionTop">-</strong>
+                  </div>
+                  <div>
+                    <span>서버 응답속도</span>
+                    <strong id="mobileLatencyValue">측정 중</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>서버 응답속도</span>
-                  <strong id="mobileLatencyValue">측정 중</strong>
+                <button id="mobileGameInfoToggleButton" class="mobile-game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
+                <div id="mobileGameInfoDetails" class="mobile-game-info-details hidden">
+                  <section>
+                    <h2>최근 정답 TOP3</h2>
+                    <ol id="mobileReactionSpeedList" class="reaction-speed-list"></ol>
+                  </section>
+                  <section>
+                    <h2>현재 게임 유저</h2>
+                    <div id="mobileGameUserInfoList" class="game-user-info-list"></div>
+                  </section>
                 </div>
               </div>
               <div id="resultOverlay" class="result-overlay hidden"></div>

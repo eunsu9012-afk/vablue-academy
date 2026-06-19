@@ -17,11 +17,13 @@ const CHARACTER_IDS = ["seolhong", "yeowooyeon", "choiaeri", "nunyo", "nano", "r
 const RESERVED_NICKNAMES = ["눈요", "설홍", "루첼", "나노", "최애리", "여우연"];
 const AI_NAMES = ["AI 루첼", "AI 나노", "AI 설홍", "AI 눈요", "AI 여우연", "AI 최애리"];
 const GAME_MODES = new Set(["normal", "hard"]);
+const AI_MODES = new Set(["enabled", "playersOnly"]);
 const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
 const CARD_REVEAL_HOLD_MS = 600;
+const START_COUNTDOWN_MS = 3000;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
 const AI_FLIP_EXTRA_DELAY_MAX_MS = 400;
 const BASE_PENALTY = 5;
@@ -410,6 +412,42 @@ function roomActivePlayerCount(room) {
   return room.players.filter((player) => !player.spectator).length;
 }
 
+function getAIMode(room) {
+  const mode = String(room?.aiMode || "enabled");
+  return AI_MODES.has(mode) ? mode : "enabled";
+}
+
+function roomAllowsAI(room) {
+  return getAIMode(room) === "enabled";
+}
+
+function getStartBlockReason(room, { ignoreCountdown = false } = {}) {
+  if (!room || room.status !== "waiting") return "게임을 시작할 수 없습니다.";
+  if (room.startCountdown && !ignoreCountdown) return "게임 시작 카운트다운 중입니다.";
+  if (!roomAllowsAI(room) && room.players.some((player) => player.isAI)) {
+    return "플레이어만 방에는 AI를 추가할 수 없습니다.";
+  }
+
+  const participants = room.players.filter((player) => !player.spectator);
+  const humans = getHumanPlayers(room).filter((player) => !player.spectator);
+  const minimumCount = roomAllowsAI(room) ? participants.length : humans.length;
+  if (minimumCount < 2 || participants.length > 6) return "최소 2명 이상 필요합니다.";
+  if (humans.some((player) => !player.assetsReady)) return ASSETS_NOT_READY_MESSAGE;
+  if (humans.some((player) => player.id !== room.hostId && !player.ready)) {
+    return "방장을 제외한 모든 플레이어가 준비해야 시작할 수 있습니다.";
+  }
+  return "";
+}
+
+function serializeCountdown(room) {
+  if (!room?.startCountdown) return null;
+  return {
+    startedAt: room.startCountdown.startedAt,
+    endsAt: room.startCountdown.endsAt,
+    totalMs: room.startCountdown.totalMs || START_COUNTDOWN_MS,
+  };
+}
+
 function serializeRoomForLobby(room) {
   return {
     id: room.id,
@@ -418,10 +456,11 @@ function serializeRoomForLobby(room) {
     penaltyMultiplier: getPenaltyMultiplier(room),
     turnTime: getTurnTime(room),
     aiDifficulty: getAIDifficulty(room),
+    aiMode: getAIMode(room),
     currentPlayers: room.players.filter((player) => !player.spectator).length,
     maxPlayers: room.maxPlayers,
     hasPassword: room.hasPassword,
-    status: room.status,
+    status: room.startCountdown ? "countdown" : room.status,
   };
 }
 
@@ -443,6 +482,9 @@ function getOnlineUsersPayload() {
           statusLabel = "튜토리얼";
           roomId = null;
           roomHasPassword = false;
+        } else if (room.status === "waiting" && room.startCountdown) {
+          status = "playing";
+          statusLabel = "시작 중";
         } else if (room.status === "waiting") {
           const isFull = roomActivePlayerCount(room) >= room.maxPlayers;
           status = isFull ? "full" : "waiting";
@@ -512,13 +554,16 @@ function serializeRoom(room, selfPlayerId = null) {
     penaltyMultiplier: getPenaltyMultiplier(room),
     turnTime: getTurnTime(room),
     aiDifficulty: getAIDifficulty(room),
+    aiMode: getAIMode(room),
     isTutorial: Boolean(room.isTutorial),
     hasPassword: room.hasPassword,
     maxPlayers: room.maxPlayers,
-    status: room.status,
+    status: room.startCountdown ? "countdown" : room.status,
+    countdown: serializeCountdown(room),
     hostId: room.hostId,
     selfPlayerId,
     canStart: canStartGame(room),
+    canStartReason: getStartBlockReason(room),
     players: room.players.map((player) => ({
       id: player.id,
       nickname: player.nickname,
@@ -606,14 +651,11 @@ function emitGameState(room) {
 }
 
 function canStartGame(room) {
-  if (room.status !== "waiting") return false;
-  const total = room.players.length;
-  if (total < 2 || total > 6) return false;
-  return getHumanPlayers(room).every((player) => player.ready && player.assetsReady);
+  return !getStartBlockReason(room);
 }
 
 function areAllHumanPlayersReady(room) {
-  const humans = getHumanPlayers(room);
+  const humans = getHumanPlayers(room).filter((player) => !player.spectator && player.id !== room.hostId);
   return humans.length > 0 && humans.every((player) => player.ready);
 }
 
@@ -751,7 +793,52 @@ function deleteRoom(roomId, reason = "") {
   emitLobbyState();
 }
 
+function clearStartCountdown(room) {
+  if (!room?.startCountdown) return;
+  if (room.startCountdown.timer) clearTimeout(room.startCountdown.timer);
+  room.startCountdown = null;
+}
+
+function cancelStartCountdown(room, reason = "") {
+  if (!room?.startCountdown) return;
+  clearStartCountdown(room);
+  logEvent("Start countdown canceled", `${room.title}${reason ? ` / ${reason}` : ""}`);
+  emitRoomState(room);
+  emitLobbyState();
+}
+
+function startGameCountdown(room) {
+  const reason = getStartBlockReason(room);
+  if (reason) return reason;
+
+  const now = Date.now();
+  clearStartCountdown(room);
+  room.startCountdown = {
+    startedAt: now,
+    endsAt: now + START_COUNTDOWN_MS,
+    totalMs: START_COUNTDOWN_MS,
+    timer: null,
+  };
+  logEvent("Start countdown", room.title);
+  emitRoomState(room);
+  emitLobbyState();
+
+  room.startCountdown.timer = setTimeout(() => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom || liveRoom.status !== "waiting") return;
+    const liveReason = getStartBlockReason(liveRoom, { ignoreCountdown: true });
+    if (liveReason) {
+      cancelStartCountdown(liveRoom, liveReason);
+      return;
+    }
+    clearStartCountdown(liveRoom);
+    beginGame(liveRoom);
+  }, START_COUNTDOWN_MS);
+  return "";
+}
+
 function removeHumanFromRoom(room, player, reason = "leave") {
+  const countdownWasActive = Boolean(room.startCountdown);
   const user = usersByNickname.get(player.nickname);
   if (user) {
     user.roomId = null;
@@ -767,6 +854,10 @@ function removeHumanFromRoom(room, player, reason = "leave") {
     return;
   }
   transferHostIfNeeded(room);
+  if (countdownWasActive && getStartBlockReason(room, { ignoreCountdown: true })) {
+    cancelStartCountdown(room, "start condition changed");
+    return;
+  }
   emitRoomState(room);
   emitLobbyState();
 }
@@ -845,6 +936,7 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
 }
 
 function clearRoomTimers(room) {
+  clearStartCountdown(room);
   if (!room?.game) return;
   for (const timer of room.game.aiTimers) {
     clearTimeout(timer);
@@ -1500,6 +1592,7 @@ function startTutorialPractice(room) {
 }
 
 function beginGame(room) {
+  clearStartCountdown(room);
   room.status = "playing";
   room.statsEnabled = !room.isTutorial && !room.players.some((player) => player.isAI);
   for (const player of room.players) {
@@ -1867,6 +1960,10 @@ function joinRoomInternal(socket, room) {
     socket.emit("errorMessage", "진행 중인 방에는 입장할 수 없습니다");
     return;
   }
+  if (room.startCountdown) {
+    socket.emit("errorMessage", "게임 시작 카운트다운 중에는 입장할 수 없습니다.");
+    return;
+  }
   if (room.players.length >= room.maxPlayers) {
     socket.emit("errorMessage", "해당 방은 가득 찼습니다");
     return;
@@ -1884,6 +1981,7 @@ function joinRoomInternal(socket, room) {
 
 function addAIToRoom(room) {
   if (room.status !== "waiting" || room.players.length >= room.maxPlayers) return false;
+  if (room.startCountdown || !roomAllowsAI(room)) return false;
   if (areAllHumanPlayersReady(room)) return false;
   const ai = createAIPlayer(room);
   room.players.push(ai);
@@ -1893,6 +1991,7 @@ function addAIToRoom(room) {
 
 function removeAIFromRoom(room) {
   if (room.status !== "waiting") return false;
+  if (room.startCountdown) return false;
   const aiIndex = room.players.map((player) => player.isAI).lastIndexOf(true);
   if (aiIndex === -1) return false;
   const [ai] = room.players.splice(aiIndex, 1);
@@ -2037,6 +2136,7 @@ io.on("connection", (socket) => {
       status: "waiting",
       players: [],
       aiSerial: 0,
+      aiMode: "enabled",
       statsEnabled: false,
       isTutorial: true,
       tutorialPhase: "guide",
@@ -2092,12 +2192,13 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("createRoom", ({ title, isPrivate, password, maxPlayers, aiCount, mode, penaltyMultiplier, turnTime, aiDifficulty } = {}) => {
+  socket.on("createRoom", ({ title, isPrivate, password, maxPlayers, aiCount, aiMode, mode, penaltyMultiplier, turnTime, aiDifficulty } = {}) => {
     const user = getCurrentUser(socket);
     if (!user || user.roomId) return;
     const roomTitle = String(title || "").trim();
     const max = Number(maxPlayers);
-    const aiTotal = Number(aiCount || 0);
+    const selectedAIMode = AI_MODES.has(String(aiMode)) ? String(aiMode) : "enabled";
+    const aiTotal = selectedAIMode === "enabled" ? Number(aiCount || 0) : 0;
     const roomMode = GAME_MODES.has(String(mode)) ? String(mode) : "normal";
     const penalty = PENALTY_MULTIPLIERS.has(Number(penaltyMultiplier)) ? Number(penaltyMultiplier) : 1;
     const selectedTurnTime = TURN_TIME_OPTIONS.has(Number(turnTime)) ? Number(turnTime) : DEFAULT_TURN_TIME;
@@ -2134,6 +2235,7 @@ io.on("connection", (socket) => {
       status: "waiting",
       players: [],
       aiSerial: 0,
+      aiMode: selectedAIMode,
       statsEnabled: true,
       game: null,
       createdAt: Date.now(),
@@ -2244,6 +2346,7 @@ io.on("connection", (socket) => {
   socket.on("toggleReady", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || room.status !== "waiting" || player.isAI) return;
+    if (room.startCountdown || player.id === room.hostId) return;
     player.ready = !player.ready;
     emitRoomState(room);
   });
@@ -2251,6 +2354,14 @@ io.on("connection", (socket) => {
   socket.on("addAI", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
+    if (!roomAllowsAI(room)) {
+      socket.emit("errorMessage", "플레이어만 방에는 AI를 추가할 수 없습니다.");
+      return;
+    }
+    if (room.startCountdown) {
+      socket.emit("errorMessage", "게임 시작 카운트다운 중에는 AI를 변경할 수 없습니다.");
+      return;
+    }
     if (areAllHumanPlayersReady(room)) {
       socket.emit("errorMessage", "모든 인간 플레이어가 준비 완료되어 AI를 추가할 수 없습니다.");
       return;
@@ -2263,6 +2374,10 @@ io.on("connection", (socket) => {
   socket.on("removeAI", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
+    if (room.startCountdown) {
+      socket.emit("errorMessage", "게임 시작 카운트다운 중에는 AI를 변경할 수 없습니다.");
+      return;
+    }
     if (!removeAIFromRoom(room)) socket.emit("errorMessage", "제거할 AI가 없습니다.");
     emitRoomState(room);
     emitLobbyState();
@@ -2271,6 +2386,7 @@ io.on("connection", (socket) => {
   socket.on("setAIDifficulty", ({ aiDifficulty } = {}) => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId || room.status !== "waiting") return;
+    if (room.startCountdown || !roomAllowsAI(room)) return;
     const selected = AI_DIFFICULTIES.has(String(aiDifficulty)) ? String(aiDifficulty) : DEFAULT_AI_DIFFICULTY;
     room.aiDifficulty = selected;
     logEvent("AI difficulty changed", `${room.title} / ${AI_DIFFICULTY_SETTINGS[selected].label}`);
@@ -2281,15 +2397,13 @@ io.on("connection", (socket) => {
   socket.on("startGame", () => {
     const { room, player } = getSocketRoomAndPlayer(socket);
     if (!room || !player || player.id !== room.hostId) return;
-    if (!getHumanPlayers(room).every((entry) => entry.assetsReady)) {
-      socket.emit("errorMessage", ASSETS_NOT_READY_MESSAGE);
+    const reason = getStartBlockReason(room);
+    if (reason) {
+      socket.emit("errorMessage", reason);
       return;
     }
-    if (!canStartGame(room)) {
-      socket.emit("errorMessage", "게임 시작 조건: 총 2명 이상");
-      return;
-    }
-    beginGame(room);
+    const countdownError = startGameCountdown(room);
+    if (countdownError) socket.emit("errorMessage", countdownError);
   });
 
   socket.on("flipCard", () => {
