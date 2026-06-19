@@ -20,6 +20,9 @@ const GAME_MODES = new Set(["normal", "hard"]);
 const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
+const TURN_START_DELAY_MS = 600;
+const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
+const AI_FLIP_EXTRA_DELAY_MAX_MS = 400;
 const BASE_PENALTY = 5;
 const PRIVATE_DECK_SIZE = 5;
 const CARD_TOTAL_WEIGHTS = [
@@ -553,6 +556,8 @@ function serializeGame(room, selfPlayerId = null) {
     turnStartedAt: game?.turnStartedAt || 0,
     turnEndsAt: game?.turnEndsAt || 0,
     turnDurationMs: getTurnDurationMs(room),
+    nextFlipAllowedAt: game?.nextFlipAllowedAt || 0,
+    turnStartDelayMs: TURN_START_DELAY_MS,
     bellLocked: Boolean(game?.bellLocked),
     matchedCharacters: game?.matchedCharacters || [],
     wrongFlash: Boolean(game?.wrongFlash),
@@ -1288,9 +1293,11 @@ function setCurrentTurn(room, playerId) {
   clearTurnTimer(room);
   const now = Date.now();
   const turnDurationMs = getTurnDurationMs(room);
+  const nextFlipAllowedAt = now + TURN_START_DELAY_MS;
   room.game.currentTurnPlayerId = playerId;
   room.game.turnStartedAt = now;
-  room.game.turnEndsAt = now + turnDurationMs;
+  room.game.turnEndsAt = nextFlipAllowedAt + turnDurationMs;
+  room.game.nextFlipAllowedAt = nextFlipAllowedAt;
   room.game.turnSerial = (room.game.turnSerial || 0) + 1;
   const turnSerial = room.game.turnSerial;
 
@@ -1299,7 +1306,7 @@ function setCurrentTurn(room, playerId) {
     if (!liveRoom?.game || liveRoom.status !== "playing") return;
     if (liveRoom.game.bellLocked || liveRoom.game.turnSerial !== turnSerial) return;
     handleTurnTimeout(liveRoom, playerId);
-  }, turnDurationMs + 40);
+  }, TURN_START_DELAY_MS + turnDurationMs + 40);
 }
 
 function getTutorialHuman(room) {
@@ -1311,9 +1318,12 @@ function setTutorialInstructionTurn(room, playerId = null) {
   clearTurnTimer(room);
   const now = Date.now();
   const human = playerId ? findPlayer(room, playerId) : getTutorialHuman(room);
+  const turnDurationMs = getTurnDurationMs(room);
+  const nextFlipAllowedAt = now + TURN_START_DELAY_MS;
   room.game.currentTurnPlayerId = human?.id || null;
   room.game.turnStartedAt = now;
-  room.game.turnEndsAt = now + getTurnDurationMs(room);
+  room.game.turnEndsAt = nextFlipAllowedAt + turnDurationMs;
+  room.game.nextFlipAllowedAt = nextFlipAllowedAt;
   room.game.turnSerial = (room.game.turnSerial || 0) + 1;
 }
 
@@ -1353,12 +1363,22 @@ function resetTutorialGameFlags(room) {
 function setTutorialScenario(room, scenario) {
   if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
   room.tutorialPhase = "guide";
-  room.tutorialTurnDurationMs = null;
+  room.tutorialTurnDurationMs = DEFAULT_TURN_TIME * 1000;
   clearRoomTimers(room);
   const { human, ai } = resetTutorialPlayers(room);
   if (!human) return false;
 
-  if (scenario === "normalMode") {
+  if (scenario === "intro") {
+    // Empty baseline for explanation-only steps.
+  } else if (scenario === "deck") {
+    human.deck = [
+      createFixedSingleCharacterCard("seolhong", 3),
+      ...createDeck(room),
+    ];
+    human.deckCount = human.deck.length;
+  } else if (scenario === "openCard") {
+    human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 3)];
+  } else if (scenario === "normalMode") {
     human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 3)];
   } else if (scenario === "hardMode") {
     human.faceUpCards = [createFixedMixedCharacterCard([
@@ -1380,6 +1400,8 @@ function setTutorialScenario(room, scenario) {
   } else if (scenario === "wrongBell") {
     human.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
     if (ai) ai.faceUpCards = [createFixedSingleCharacterCard("seolhong", 2)];
+  } else if (scenario === "scoreWin") {
+    human.score = 80;
   } else {
     return false;
   }
@@ -1421,7 +1443,7 @@ function startTutorialTimeout(room) {
 function startTutorialPractice(room) {
   if (!room?.isTutorial || !room.game || room.status !== "playing") return false;
   room.tutorialPhase = "practice";
-  room.tutorialTurnDurationMs = null;
+  room.tutorialTurnDurationMs = DEFAULT_TURN_TIME * 1000;
   clearRoomTimers(room);
   const { human, ai } = resetTutorialPlayers(room, { humanScore: 25, aiScore: 5 });
   if (!human) return false;
@@ -1470,6 +1492,7 @@ function beginGame(room) {
     currentTurnPlayerId: null,
     turnStartedAt: 0,
     turnEndsAt: 0,
+    nextFlipAllowedAt: 0,
     turnSerial: 0,
     turnTimer: null,
     bellLocked: false,
@@ -1508,6 +1531,7 @@ function handleFlipCard(room, player) {
   if (room.game.bellLocked) return false;
   if (!player || player.spectator || player.eliminated) return false;
   if (room.game.currentTurnPlayerId !== player.id) return false;
+  if (Date.now() < Number(room.game.nextFlipAllowedAt || 0)) return false;
 
   if (!Array.isArray(player.deck) || player.deck.length === 0) {
     player.deck = createDeck(room);
@@ -1682,7 +1706,7 @@ function handleTurnTimeout(room, playerId) {
     }
 
     if (liveRoom.isTutorial && liveRoom.tutorialPhase !== "practice") {
-      liveRoom.tutorialTurnDurationMs = null;
+      liveRoom.tutorialTurnDurationMs = DEFAULT_TURN_TIME * 1000;
       setTutorialInstructionTurn(liveRoom, player.spectator ? nextAlivePlayerId(liveRoom, player.id) : player.id);
       emitGameState(liveRoom);
       return;
@@ -1709,7 +1733,8 @@ function scheduleAITurn(room) {
   const currentPlayer = findPlayer(room, room.game.currentTurnPlayerId);
   if (!currentPlayer?.isAI || currentPlayer.spectator || currentPlayer.eliminated) return;
 
-  const delay = room.isTutorial ? randomInt(2200, 4200) : randomInt(500, 2000);
+  const waitForTurnStart = Math.max(0, Number(room.game.nextFlipAllowedAt || 0) - Date.now());
+  const delay = waitForTurnStart + randomInt(AI_FLIP_EXTRA_DELAY_MIN_MS, AI_FLIP_EXTRA_DELAY_MAX_MS);
   const playerId = currentPlayer.id;
   const tableVersion = room.game.tableVersion;
   const timer = setTimeout(() => {
@@ -1924,7 +1949,7 @@ io.on("connection", (socket) => {
       title: "튜토리얼",
       mode: "normal",
       penaltyMultiplier: 1,
-      turnTime: 10,
+      turnTime: DEFAULT_TURN_TIME,
       aiDifficulty: "tutorial",
       hasPassword: false,
       password: "",
@@ -1936,7 +1961,7 @@ io.on("connection", (socket) => {
       statsEnabled: false,
       isTutorial: true,
       tutorialPhase: "guide",
-      tutorialTurnDurationMs: null,
+      tutorialTurnDurationMs: DEFAULT_TURN_TIME * 1000,
       game: null,
       createdAt: Date.now(),
     };

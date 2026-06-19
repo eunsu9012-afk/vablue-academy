@@ -90,6 +90,8 @@ let turnTimerInterval = null;
 let bellLogTimer = null;
 let bellAnimationTimer = null;
 let latencyTimer = null;
+let flipAvailabilityTimer = null;
+let tutorialAdvanceTimer = null;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
@@ -99,6 +101,7 @@ const TUTORIAL_STEPS = [
     key: "menu",
     label: "1 / 12",
     target: "menu",
+    scenario: "intro",
     text: "우측 상단 메뉴에서\nBGM, 효과음, 설정을 변경할 수 있습니다.",
     nextText: "다음",
   },
@@ -106,6 +109,7 @@ const TUTORIAL_STEPS = [
     key: "score",
     label: "2 / 12",
     target: "score",
+    scenario: "intro",
     text: "이 게임은 카드 수로 승부하지 않습니다.\n점수가 0 이하가 되면 탈락합니다.",
     nextText: "다음",
   },
@@ -129,6 +133,7 @@ const TUTORIAL_STEPS = [
     key: "deck",
     label: "5 / 12",
     target: "deck",
+    scenario: "deck",
     text: () => `카드는 자신의 차례에만 공개할 수 있습니다.\n지금은 내 차례입니다.\n\n${isMobileMode() ? "게임 화면을 터치하세요." : "카드덱을 클릭하세요."}`,
     waitingFor: "flip",
   },
@@ -136,6 +141,7 @@ const TUTORIAL_STEPS = [
     key: "openCard",
     label: "6 / 12",
     target: "openCard",
+    scenario: "openCard",
     text: "공개된 카드는\n모든 플레이어가 함께 보는 카드입니다.",
     nextText: "다음",
   },
@@ -151,6 +157,7 @@ const TUTORIAL_STEPS = [
     key: "bell",
     label: "8 / 12",
     target: "bell",
+    scenario: "correctBell",
     text: () => `전체 공개 카드에서 설홍이 정확히 5개가 되었습니다.\n이제 종을 치세요.\n\n${isMobileMode() ? "게임 화면을 터치해서 종을 칠 수 있습니다." : "종을 클릭하거나 스페이스바를 눌러 종을 칠 수 있습니다."}`,
     waitingFor: "correctBell",
   },
@@ -173,6 +180,7 @@ const TUTORIAL_STEPS = [
     key: "scoreWin",
     label: "11 / 12",
     target: "score",
+    scenario: "scoreWin",
     text: "오답과 시간초과로 점수가 줄어드는 것을 확인했습니다.\n탈락하면 직접 플레이는 할 수 없고 관전할 수 있습니다.\n마지막까지 살아남은 플레이어가 승리합니다.",
     nextText: "실전 체험",
   },
@@ -194,6 +202,7 @@ function showScreen(name) {
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
   if (name !== "game") {
     stopTurnTimer();
+    clearFlipAvailabilityTimer();
     setText("#turnTimer", "--");
     $("#turnTimer")?.classList.remove("urgent");
   }
@@ -264,7 +273,29 @@ function isBellAvailable(game = state.game) {
 function isFlipAvailable(game = state.game) {
   if (!isSelfAbleToAct(game)) return false;
   const self = getSelfPlayer(game);
-  return self?.id === game.currentTurnPlayerId;
+  if (self?.id !== game.currentTurnPlayerId) return false;
+  return Date.now() >= Number(game.nextFlipAllowedAt || 0);
+}
+
+function clearFlipAvailabilityTimer() {
+  if (flipAvailabilityTimer) clearTimeout(flipAvailabilityTimer);
+  flipAvailabilityTimer = null;
+}
+
+function scheduleFlipAvailabilityRefresh(game = state.game) {
+  clearFlipAvailabilityTimer();
+  const self = getSelfPlayer(game);
+  if (!game || !self || self.spectator || self.eliminated || game.bellLocked) return;
+  if (self.id !== game.currentTurnPlayerId) return;
+  const remaining = Number(game.nextFlipAllowedAt || 0) - Date.now();
+  if (remaining <= 0) return;
+  const roomId = game.roomId;
+  const turnPlayerId = game.currentTurnPlayerId;
+  flipAvailabilityTimer = setTimeout(() => {
+    flipAvailabilityTimer = null;
+    if (state.game?.roomId !== roomId || state.game?.currentTurnPlayerId !== turnPlayerId) return;
+    renderGame(state.game);
+  }, remaining + 25);
 }
 
 function updateMobileTouchHint(game = state.game) {
@@ -791,6 +822,7 @@ function getTutorialStep() {
 }
 
 function resetTutorialState(active = false) {
+  clearTutorialAdvanceTimer();
   state.tutorial = {
     active,
     stepIndex: 0,
@@ -798,6 +830,19 @@ function resetTutorialState(active = false) {
     waitingFor: null,
     seenCardId: null,
   };
+}
+
+function clearTutorialAdvanceTimer() {
+  if (tutorialAdvanceTimer) clearTimeout(tutorialAdvanceTimer);
+  tutorialAdvanceTimer = null;
+}
+
+function scheduleTutorialAdvance(delayMs) {
+  clearTutorialAdvanceTimer();
+  tutorialAdvanceTimer = setTimeout(() => {
+    tutorialAdvanceTimer = null;
+    advanceTutorialStep();
+  }, delayMs);
 }
 
 function clearTutorialHighlight() {
@@ -866,6 +911,7 @@ function tutorialControlHint(step) {
 }
 
 function hideTutorialOverlay() {
+  clearTutorialAdvanceTimer();
   $("#tutorialOverlay")?.classList.add("hidden");
   clearTutorialHighlight();
 }
@@ -908,8 +954,13 @@ function renderTutorialOverlay(game = state.game) {
   $("#tutorialStepLabel").textContent = step.label;
   $("#tutorialText").textContent = tutorialStepText(step);
   $("#tutorialControlHint").textContent = tutorialControlHint(step);
+  const backButton = $("#tutorialBackButton");
   const nextButton = $("#tutorialNextButton");
   const completeButton = $("#tutorialCompleteButton");
+  if (backButton) {
+    backButton.disabled = state.tutorial.stepIndex <= 0;
+    backButton.classList.toggle("hidden", false);
+  }
   nextButton.textContent = step.nextText || "다음";
   nextButton.classList.toggle("hidden", Boolean(step.waitingFor || step.practice));
   completeButton.classList.toggle("hidden", false);
@@ -918,11 +969,22 @@ function renderTutorialOverlay(game = state.game) {
 
 function advanceTutorialStep() {
   if (!state.tutorial.active) return;
+  clearTutorialAdvanceTimer();
   const current = getTutorialStep();
   state.tutorial.stepIndex = Math.min(state.tutorial.stepIndex + 1, TUTORIAL_STEPS.length - 1);
   state.tutorial.preparedStep = null;
   state.tutorial.waitingFor = null;
   if (current?.key === "win") state.tutorial.seenCardId = null;
+  renderTutorialOverlay(state.game);
+}
+
+function goBackTutorialStep() {
+  if (!state.tutorial.active || state.tutorial.stepIndex <= 0) return;
+  clearTutorialAdvanceTimer();
+  state.tutorial.stepIndex = Math.max(0, state.tutorial.stepIndex - 1);
+  state.tutorial.preparedStep = null;
+  state.tutorial.waitingFor = null;
+  state.tutorial.seenCardId = null;
   renderTutorialOverlay(state.game);
 }
 
@@ -958,11 +1020,11 @@ function handleTutorialBellResult(payload) {
   if (!state.tutorial.active || !state.game?.isTutorial) return false;
   const step = getTutorialStep();
   if (step?.waitingFor === "correctBell" && payload?.correct) {
-    setTimeout(advanceTutorialStep, 700);
+    scheduleTutorialAdvance(700);
     return true;
   }
   if (step?.waitingFor === "wrongBell" && !payload?.correct) {
-    setTimeout(advanceTutorialStep, 700);
+    scheduleTutorialAdvance(700);
     return true;
   }
   return false;
@@ -1231,7 +1293,7 @@ function renderGame(game) {
     zone.classList.toggle("eliminated", player.spectator || player.eliminated);
 
     const isSelf = player.id === game.selfPlayerId;
-    const canFlip = isSelf && !player.spectator && player.id === game.currentTurnPlayerId && !game.bellLocked;
+    const canFlip = isSelf && isFlipAvailable(game);
 
     const turnChip = player.id === game.currentTurnPlayerId
       ? `<span class="current-turn-chip">${isSelf ? "내 차례" : "차례"}</span>`
@@ -1254,6 +1316,7 @@ function renderGame(game) {
   renderGameInfoPanel(game);
   updateMobileGameInfoPanel();
   updateMobileTouchHint(game);
+  scheduleFlipAvailabilityRefresh(game);
   updateGameOverlay(game);
   syncTutorialWithGame(game);
 }
@@ -1496,8 +1559,12 @@ function startTurnTimer(game) {
       return;
     }
     const remaining = Math.max(0, (game.turnEndsAt - Date.now()) / 1000);
-    timer.textContent = remaining.toFixed(1);
-    timer.classList.toggle("urgent", remaining <= 1.5);
+    const maxVisible = Number(game.turnDurationMs || 0) > 0
+      ? Number(game.turnDurationMs) / 1000
+      : Number(game.turnTime || remaining);
+    const visibleRemaining = Math.min(remaining, maxVisible);
+    timer.textContent = visibleRemaining.toFixed(1);
+    timer.classList.toggle("urgent", visibleRemaining <= 1.5);
   };
   render();
   turnTimerInterval = setInterval(render, 100);
@@ -1755,6 +1822,7 @@ $("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
 $("#startGameButton").addEventListener("click", () => socket.emit("startGame"));
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
 $("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
+$("#tutorialBackButton")?.addEventListener("click", goBackTutorialStep);
 $("#tutorialNextButton")?.addEventListener("click", advanceTutorialStep);
 $("#tutorialCompleteButton")?.addEventListener("click", () => socket.emit("completeTutorial"));
 $("#gameBoard")?.addEventListener("pointerup", handleMobileGameBoardTouch);
@@ -1909,7 +1977,7 @@ socket.on("timeoutResult", (payload) => {
   showToast(`${name} 시간초과! -${payload.penalty}점`);
   const step = getTutorialStep();
   if (state.tutorial.active && state.game?.isTutorial && step?.waitingFor === "timeout") {
-    setTimeout(advanceTutorialStep, 900);
+    scheduleTutorialAdvance(900);
   }
 });
 

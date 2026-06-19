@@ -1409,15 +1409,17 @@ small {
 
 .tutorial-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .tutorial-actions .primary-button,
 .tutorial-actions .secondary-button {
   min-height: 38px;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 8px 7px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .tutorial-highlight {
@@ -2029,6 +2031,8 @@ small {
   body.is-mobile .tutorial-actions .primary-button,
   body.is-mobile .tutorial-actions .secondary-button {
     min-height: 36px;
+    padding: 7px 4px;
+    font-size: 12px;
   }
 
   body.is-mobile .result-overlay {
