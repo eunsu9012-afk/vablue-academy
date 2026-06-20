@@ -14,8 +14,15 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, "public")));
 
 const CHARACTER_IDS = ["seolhong", "yeowooyeon", "choiaeri", "nunyo", "nano", "ruchel"];
-const FAN_CHARACTER_IDS = new Set(["jjangdori", "arangi", "golgoli", "maesili", "woori", "pico"]);
-const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
+const FAN_CHARACTER_IDS = new Set(["puru", "nano", "bonhoro", "silong", "yauman", "pico"]);
+const FAN_CHARACTER_ALIASES = new Map([
+  ["jjangdori", "puru"],
+  ["arangi", "nano"],
+  ["golgoli", "bonhoro"],
+  ["maesili", "silong"],
+  ["woori", "yauman"],
+]);
+const DEFAULT_FAN_CHARACTER_ID = "puru";
 const RESERVED_NICKNAMES = ["눈요", "설홍", "루첼", "나노", "최애리", "여우연"];
 const AI_NAMES = ["AI 루첼", "AI 나노", "AI 설홍", "AI 눈요", "AI 여우연", "AI 최애리"];
 const GAME_MODES = new Set(["normal", "hard"]);
@@ -94,7 +101,8 @@ function normalizeStatRecord(record = {}) {
 }
 
 function normalizeFanCharacterId(value) {
-  const avatarId = String(value || "").trim();
+  const rawAvatarId = String(value || "").trim();
+  const avatarId = FAN_CHARACTER_ALIASES.get(rawAvatarId) || rawAvatarId;
   return FAN_CHARACTER_IDS.has(avatarId) ? avatarId : DEFAULT_FAN_CHARACTER_ID;
 }
 

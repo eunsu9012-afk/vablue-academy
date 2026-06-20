@@ -10,15 +10,22 @@ const CHARACTER_ASSETS = {
 };
 
 const FAN_CHARACTERS = [
-  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
-  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
-  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
-  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
-  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
+  { id: "puru", name: "푸루", image: "/assets/fan-characters/puru.png" },
+  { id: "nano", name: "나노", image: "/assets/fan-characters/nano.png" },
+  { id: "bonhoro", name: "본호로", image: "/assets/fan-characters/bonhoro.png" },
+  { id: "silong", name: "실롱", image: "/assets/fan-characters/silong.png" },
+  { id: "yauman", name: "야우먼", image: "/assets/fan-characters/yauman.png" },
   { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
-const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
+const FAN_CHARACTER_ALIASES = new Map([
+  ["jjangdori", "puru"],
+  ["arangi", "nano"],
+  ["golgoli", "bonhoro"],
+  ["maesili", "silong"],
+  ["woori", "yauman"],
+]);
+const DEFAULT_FAN_CHARACTER_ID = "puru";
 const FAN_CHARACTER_STORAGE_KEY = "babyblue-fan-character-id";
 const RANDOM_NICKNAMES = ["푸른별", "스포처", "벨친구", "카드왕", "블루링", "하늘종"];
 
@@ -124,6 +131,7 @@ let lastStartCountdownNumber = null;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
+const missingFanAssetWarnings = new Set();
 
 const TUTORIAL_STEPS = [
   {
@@ -485,13 +493,43 @@ function displayName(player) {
 }
 
 function normalizeFanCharacterId(value) {
-  return FAN_CHARACTER_IDS.has(value) ? value : DEFAULT_FAN_CHARACTER_ID;
+  const rawId = String(value || "").trim();
+  const id = FAN_CHARACTER_ALIASES.get(rawId) || rawId;
+  return FAN_CHARACTER_IDS.has(id) ? id : DEFAULT_FAN_CHARACTER_ID;
 }
 
 function fanCharacterById(value) {
   const id = normalizeFanCharacterId(value);
   return FAN_CHARACTERS.find((character) => character.id === id) || FAN_CHARACTERS[0];
 }
+
+function fanCharacterInitial(character) {
+  return String(character?.name || "팬").trim().slice(0, 1) || "팬";
+}
+
+function handleFanAvatarImageError(image) {
+  const source = image?.getAttribute("src") || "";
+  if (source && !missingFanAssetWarnings.has(source)) {
+    missingFanAssetWarnings.add(source);
+    console.warn(`Fan character asset failed to load: ${source}`);
+  }
+  const holder = image?.closest(".fan-avatar, .fan-character-image");
+  holder?.classList.add("image-missing");
+  image?.remove();
+}
+
+window.handleFanAvatarImageError = handleFanAvatarImageError;
+
+document.addEventListener(
+  "error",
+  (event) => {
+    const image = event.target;
+    if (image instanceof HTMLImageElement && image.closest(".fan-avatar, .fan-character-image")) {
+      handleFanAvatarImageError(image);
+    }
+  },
+  true,
+);
 
 function getStoredFanCharacterId() {
   return normalizeFanCharacterId(localStorage.getItem(FAN_CHARACTER_STORAGE_KEY));
@@ -505,16 +543,22 @@ function saveFanCharacterId(value) {
 function renderFanAvatar(entity, size = "sm") {
   if (!entity || entity.isAI) return "";
   const character = fanCharacterById(entity.avatarId || entity.fanCharacterId || state.fanCharacterId);
+  const initial = fanCharacterInitial(character);
   return `
-    <span class="fan-avatar fan-avatar-${size}" title="${escapeHtml(character.name)}">
-      <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" loading="lazy" decoding="async" onerror="this.remove()" />
+    <span class="fan-avatar fan-avatar-${size} bb-avatar bb-avatar-user" title="${escapeHtml(character.name)}" data-avatar-id="${escapeHtml(character.id)}" data-avatar-initial="${escapeHtml(initial)}">
+      <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" width="40" height="40" loading="lazy" decoding="async" />
     </span>
   `;
 }
 
+function renderAIAvatar() {
+  return `<span class="bb-avatar bb-avatar-ai" aria-hidden="true">AI</span>`;
+}
+
 function renderName(player) {
   const className = player?.isVaNickname ? "va-name" : "";
-  return `<span class="name-with-avatar">${renderFanAvatar(player)}${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span></span>`;
+  const avatarMarkup = player?.isAI ? renderAIAvatar() : renderFanAvatar(player);
+  return `<span class="name-with-avatar">${avatarMarkup}${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span></span>`;
 }
 
 function renderRankBadges(player) {
@@ -547,19 +591,19 @@ function renderFanCharacterPicker() {
   for (const character of FAN_CHARACTERS) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "fan-character-option";
+    button.className = "fan-character-option bb-card-soft";
     button.dataset.avatarId = character.id;
     button.setAttribute("role", "radio");
+    const initial = fanCharacterInitial(character);
     button.innerHTML = `
-      <span class="fan-character-image">
-        <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" loading="eager" decoding="async" />
+      <span class="fan-character-image bb-avatar bb-avatar-user" data-avatar-id="${escapeHtml(character.id)}" data-avatar-initial="${escapeHtml(initial)}">
+        <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" width="56" height="56" loading="eager" decoding="async" />
       </span>
       <strong>${escapeHtml(character.name)}</strong>
       <span class="fan-character-check" aria-hidden="true"></span>
     `;
     button.querySelector("img")?.addEventListener("error", (event) => {
-      event.currentTarget.remove();
-      button.querySelector(".fan-character-image")?.classList.add("image-missing");
+      handleFanAvatarImageError(event.currentTarget);
     });
     button.addEventListener("click", () => selectFanCharacter(character.id));
     grid.appendChild(button);
@@ -1342,7 +1386,7 @@ function renderRoom(room) {
     hideTutorialOverlay();
     const overlay = $("#resultOverlay");
     if (overlay) {
-      overlay.className = "result-overlay hidden";
+      overlay.className = "result-overlay screen-result hidden";
       overlay.innerHTML = "";
     }
     showScreen("lobby");
@@ -1970,11 +2014,11 @@ function startTurnTimer(game) {
 
 function updateGameOverlay(game) {
   const overlay = $("#resultOverlay");
-  overlay.className = "result-overlay hidden";
+  overlay.className = "result-overlay screen-result hidden";
   overlay.innerHTML = "";
 
   if (state.gameResult) {
-    overlay.className = "result-overlay result-card";
+    overlay.className = "result-overlay screen-result result-card";
     overlay.innerHTML = renderGameResult(state.gameResult);
     overlay.querySelector(".overlay-leave-button")?.addEventListener("click", () => socket.emit("leaveRoom"));
     overlay.querySelector(".overlay-watch-button")?.addEventListener("click", () => {
@@ -1987,7 +2031,7 @@ function updateGameOverlay(game) {
   const self = game.players?.find((player) => player.id === game.selfPlayerId);
   if (self && !self.spectator) state.spectatorOverlayDismissedFor = null;
   if (self?.spectator && game.status === "playing" && state.spectatorOverlayDismissedFor !== self.id) {
-    overlay.className = "result-overlay result-card";
+    overlay.className = "result-overlay screen-result result-card";
     overlay.innerHTML = `
       <div class="result-box">
         <h2>패배</h2>

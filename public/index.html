@@ -7,9 +7,9 @@
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand">
+    <div class="app-shell bb-page">
+      <header class="topbar bb-header">
+        <div class="brand bb-brand">
           <span class="brand-mark"><img src="/assets/bell/bell.png" alt="" aria-hidden="true" /></span>
           <span>베이블루 할리갈리 온라인</span>
         </div>
@@ -19,7 +19,7 @@
           <strong id="turnTimer" class="turn-timer">--</strong>
           <span id="gamePenaltyBadge" class="badge penalty-badge">[1배]</span>
         </div>
-        <button id="settingsButton" class="icon-button" type="button" title="메뉴">메뉴</button>
+        <button id="settingsButton" class="icon-button bb-button" type="button" title="메뉴" aria-label="설정 메뉴 열기">메뉴</button>
         <section id="settingsPanel" class="settings-panel hidden" aria-label="설정 패널">
           <label class="settings-row">
             <span>BGM 모드</span>
@@ -45,7 +45,7 @@
       </header>
 
       <main>
-        <section id="nicknameScreen" class="screen nickname-screen">
+        <section id="nicknameScreen" class="screen nickname-screen bb-screen screen-nickname" data-design-reference="닉네임 디자인.png">
           <form id="nicknameForm" class="entry-panel">
             <div class="tiny-deco">✦ ♡ ✿</div>
             <h1>닉네임 입력</h1>
@@ -66,9 +66,9 @@
           </form>
         </section>
 
-        <section id="lobbyScreen" class="screen hidden">
+        <section id="lobbyScreen" class="screen hidden bb-screen screen-lobby" data-design-reference="대기실 디자인.png">
           <div class="lobby-grid">
-            <section class="panel guide-panel">
+            <section class="panel bb-panel guide-panel">
               <button id="guideToggleButton" class="guide-title-toggle" type="button" aria-expanded="true">게임 설명 ▲</button>
               <div id="guideBody" class="guide-body">
                 <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼</button>
@@ -119,7 +119,7 @@
               </div>
             </section>
 
-            <section class="panel room-list-panel">
+            <section class="panel bb-panel room-list-panel">
               <div class="section-title-row">
                 <h2>게임방 목록</h2>
                 <span id="onlineCount" class="pill">0명 접속</span>
@@ -127,7 +127,7 @@
               <div id="roomList" class="room-list"></div>
             </section>
 
-            <section id="onlineUsersPanel" class="panel online-users-panel">
+            <section id="onlineUsersPanel" class="panel bb-panel online-users-panel">
               <div class="section-title-row">
                 <h2>현재 접속 유저</h2>
                 <button id="onlineUsersToggleButton" class="mini-button" type="button">현재 접속 유저 ▼</button>
@@ -137,13 +137,13 @@
             </section>
 
             <aside class="lobby-side">
-              <section class="panel compact-panel">
+              <section class="panel bb-panel compact-panel">
                 <h2>내 전적</h2>
                 <div id="myStats" class="stats-grid"></div>
                 <button id="openCreateRoomButton" class="primary-button create-room-trigger" type="button">방 만들기</button>
               </section>
 
-              <section class="panel ranking-panel">
+              <section class="panel bb-panel ranking-panel">
                 <h2>서버 최다승 TOP3</h2>
                 <ol id="topWinsList" class="top-list"></ol>
                 <h2>서버 최고승률 TOP3</h2>
@@ -153,16 +153,16 @@
           </div>
         </section>
 
-        <section id="roomScreen" class="screen hidden">
+        <section id="roomScreen" class="screen hidden bb-screen screen-room" data-design-reference="게임 대기실 디자인.png">
           <div class="room-layout">
-            <section class="panel">
+            <section class="panel bb-panel">
               <div class="section-title-row">
                 <h2 id="roomTitle">방</h2>
                 <span id="roomCount" class="pill"></span>
               </div>
               <div id="roomPlayers" class="waiting-players"></div>
             </section>
-            <aside class="panel room-actions">
+            <aside class="panel bb-panel room-actions">
               <h2>준비</h2>
               <button id="readyButton" class="primary-button" type="button">준비</button>
               <label class="room-ai-difficulty-row">
@@ -182,7 +182,7 @@
           </div>
         </section>
 
-        <section id="gameScreen" class="screen hidden game-screen">
+        <section id="gameScreen" class="screen hidden game-screen bb-screen screen-game" data-design-reference="게임화면 디자인.png">
           <div class="game-layout">
             <div id="gameBoard" class="game-board">
               <div id="bellLog" class="bell-log hidden"></div>
@@ -215,19 +215,19 @@
                   </section>
                 </div>
               </div>
-              <div id="resultOverlay" class="result-overlay hidden"></div>
+              <div id="resultOverlay" class="result-overlay hidden screen-result" data-design-reference="게임종료화면 디자인.png"></div>
             </div>
             <button id="gameInfoToggleButton" class="game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
-            <aside id="gameInfoPanel" class="game-info-panel" aria-label="게임 정보">
-              <section class="game-info-card">
+            <aside id="gameInfoPanel" class="game-info-panel bb-panel" aria-label="게임 정보">
+              <section class="game-info-card bb-card">
                 <h2>최근 정답 반응속도</h2>
                 <ol id="reactionSpeedList" class="reaction-speed-list"></ol>
               </section>
-              <section class="game-info-card">
+              <section class="game-info-card bb-card">
                 <h2>현재 게임 유저</h2>
                 <div id="gameUserInfoList" class="game-user-info-list"></div>
               </section>
-              <section class="game-info-card latency-card">
+              <section class="game-info-card bb-card latency-card">
                 <h2>서버 응답속도</h2>
                 <strong id="serverLatencyValue" class="latency-value latency-measuring">측정 중</strong>
               </section>
@@ -363,8 +363,8 @@
     </div>
 
     <div id="userContextMenu" class="context-menu hidden"></div>
-    <div id="tutorialOverlay" class="tutorial-overlay hidden" aria-live="polite">
-      <div class="tutorial-card">
+    <div id="tutorialOverlay" class="tutorial-overlay hidden screen-tutorial" aria-live="polite" data-design-reference="튜토리얼 디자인.png">
+      <div class="tutorial-card bb-card">
         <strong id="tutorialStepLabel" class="tutorial-step-label"></strong>
         <p id="tutorialText"></p>
         <p id="tutorialControlHint" class="tutorial-control-hint"></p>
