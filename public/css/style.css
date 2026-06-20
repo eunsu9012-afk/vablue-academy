@@ -6594,3 +6594,266 @@ body,
     pointer-events: none;
   }
 }
+
+/* BabyBlue UI Foundation v1.1 - correction guards */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+.bb-panel,
+.bb-card,
+.panel,
+.card,
+.room-card,
+.player-zone,
+.player-card-shell,
+.game-info-card,
+.ranking-panel,
+.online-users-panel,
+.result-card,
+.modal-card,
+.tutorial-card {
+  min-width: 0;
+}
+
+.bb-panel *,
+.bb-card *,
+.panel *,
+.card *,
+.room-card *,
+.player-zone *,
+.player-card-shell *,
+.game-info-card *,
+.ranking-panel *,
+.online-users-panel *,
+.result-card *,
+.modal-card *,
+.tutorial-card * {
+  min-width: 0;
+}
+
+.bb-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-clamp-2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.bb-scroll-y {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bb-no-overflow {
+  overflow: hidden;
+}
+
+.player-name,
+.player-name .name-with-avatar,
+.name-with-avatar,
+.name-with-avatar > span:last-child,
+.online-user-name,
+.online-user-name .name-with-avatar,
+.context-title,
+.room-card h3,
+.waiting-player h3,
+.game-user-info strong,
+.game-user-info strong .name-with-avatar,
+.top-list li,
+.top-list .name-with-avatar,
+.rank-badges,
+.result-score-list strong,
+.result-score-list .name-with-avatar,
+.fan-character-option strong,
+.mobile-section-toggle,
+.guide-title-toggle,
+.bell-log,
+.toast {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-card .hint-text,
+.room-card .room-meta,
+.tutorial-message,
+.tutorial-card p,
+.result-box .hint-text {
+  overflow-wrap: anywhere;
+}
+
+.room-list,
+.online-users-list,
+.top-list,
+.game-user-info-list,
+.reaction-speed-list,
+.result-score-list {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.online-users-list {
+  max-height: min(52vh, 520px);
+}
+
+.top-list {
+  max-height: 184px;
+}
+
+.reaction-speed-list {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reaction-speed-list li {
+  min-width: 0;
+}
+
+.reaction-speed-list li:not(.empty-info) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  overflow: hidden;
+}
+
+.reaction-rank {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.reaction-player {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reaction-time,
+.reaction-speed-list strong {
+  min-width: max-content;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-user-info-list {
+  max-height: min(52vh, 420px);
+}
+
+#gameInfoPanel .game-user-info-list,
+.mobile-game-info-details .game-user-info-list {
+  max-height: 100%;
+}
+
+.game-user-info {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.game-user-main {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.game-user-meta,
+.game-user-info span,
+.result-score-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-overlay,
+.tutorial-message,
+.mobile-touch-hint,
+.tutorial-guide-panel {
+  pointer-events: none;
+}
+
+.tutorial-guide-panel {
+  max-height: min(34vh, 280px);
+  overflow: hidden;
+}
+
+.tutorial-guide-panel .tutorial-message {
+  max-height: 5.4em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tutorial-guide-panel button,
+.tutorial-guide-panel .tutorial-actions,
+.tutorial-guide-panel .tutorial-actions * {
+  pointer-events: auto;
+}
+
+body.is-tutorial-game .tutorial-overlay {
+  left: auto;
+  right: 18px;
+  bottom: 18px;
+  width: min(360px, calc(100vw - 36px));
+  transform: none;
+}
+
+@media (min-width: 1280px) {
+  body.is-tutorial-game .tutorial-overlay {
+    top: calc(var(--bb-current-header-h, var(--bb-header-h)) + 18px);
+    right: 24px;
+    bottom: auto;
+    width: min(360px, 24vw);
+    max-height: calc(100vh - var(--bb-current-header-h, var(--bb-header-h)) - 42px);
+  }
+}
+
+@media (max-width: 767px) {
+  body.is-mobile .online-users-list {
+    max-height: min(48vh, 420px);
+  }
+
+  body.is-mobile .reaction-speed-list,
+  body.is-mobile .game-user-info-list {
+    max-height: min(38vh, 300px);
+  }
+
+  body.is-mobile .mobile-touch-hint {
+    bottom: calc(var(--bb-safe-bottom) + clamp(72px, 16vh, 132px));
+    opacity: 0.92;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-overlay {
+    position: static;
+    width: auto;
+    margin: 8px;
+    transform: none;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-guide-panel {
+    max-height: none;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-guide-panel .tutorial-message {
+    max-height: 4.2em;
+  }
+}

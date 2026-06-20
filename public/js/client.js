@@ -10,22 +10,23 @@ const CHARACTER_ASSETS = {
 };
 
 const FAN_CHARACTERS = [
-  { id: "puru", name: "푸루", image: "/assets/fan-characters/puru.png" },
-  { id: "nano", name: "나노", image: "/assets/fan-characters/nano.png" },
-  { id: "bonhoro", name: "본호로", image: "/assets/fan-characters/bonhoro.png" },
-  { id: "silong", name: "실롱", image: "/assets/fan-characters/silong.png" },
-  { id: "yauman", name: "야우먼", image: "/assets/fan-characters/yauman.png" },
+  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
+  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
+  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
+  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
   { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
 const FAN_CHARACTER_ALIASES = new Map([
-  ["jjangdori", "puru"],
-  ["arangi", "nano"],
-  ["golgoli", "bonhoro"],
-  ["maesili", "silong"],
-  ["woori", "yauman"],
+  ["puru", "jjangdori"],
+  ["nano", "arangi"],
+  ["bonhoro", "golgoli"],
+  ["silong", "maesili"],
+  ["yauman", "woori"],
+  ["uri", "woori"],
 ]);
-const DEFAULT_FAN_CHARACTER_ID = "puru";
+const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
 const FAN_CHARACTER_STORAGE_KEY = "babyblue-fan-character-id";
 const RANDOM_NICKNAMES = ["푸른별", "스포처", "벨친구", "카드왕", "블루링", "하늘종"];
 
@@ -1741,9 +1742,10 @@ function renderReactionSpeeds(rows, selector = "#reactionSpeedList") {
   }
   if (selector !== "#reactionSpeedList") {
     list.innerHTML = topRows.map((row, index) => `
-      <li>
-        <span>${index + 1}위 ${escapeHtml(formatReactionPlayerName(row))}</span>
-        <strong>${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
+      <li class="${index === 0 ? "is-best" : ""}">
+        <span class="reaction-rank">${index + 1}위</span>
+        <span class="reaction-player">${escapeHtml(formatReactionPlayerName(row))}</span>
+        <strong class="reaction-time">${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
       </li>
     `).join("");
     return;
@@ -1752,7 +1754,7 @@ function renderReactionSpeeds(rows, selector = "#reactionSpeedList") {
     <li class="${index === 0 ? "is-best" : ""}">
       <span class="reaction-rank">${index + 1}위</span>
       <span class="reaction-player">${escapeHtml(formatReactionPlayerName(row))}</span>
-      <strong>${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
+      <strong class="reaction-time">${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
     </li>
   `).join("");
 }
