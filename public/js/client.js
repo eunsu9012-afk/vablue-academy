@@ -390,8 +390,8 @@ function updateMobileTouchHint(game = state.game) {
     return;
   }
   hint.innerHTML = `
-    <span class="mobile-bell-guide">종을 터치 →</span>
-    <span class="mobile-open-guide">화면 터치시 카드 오픈 →</span>
+    <span class="mobile-bell-guide">종 터치</span>
+    <span class="mobile-open-guide">화면 터치: 카드 오픈</span>
   `;
   hint.classList.remove("hidden");
 }
