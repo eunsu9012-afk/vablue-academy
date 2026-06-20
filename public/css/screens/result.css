@@ -1,0 +1,7 @@
+@charset "UTF-8";
+
+/* Stage 7 target: 게임종료화면 디자인.png
+   TODO:
+   - PC: centered result modal with max 6 result rows.
+   - Mobile: vertical result card with compact action buttons.
+   - AI result rows use AI badge only; human rows may show fan avatar. */

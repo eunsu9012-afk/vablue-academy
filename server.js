@@ -14,15 +14,16 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, "public")));
 
 const CHARACTER_IDS = ["seolhong", "yeowooyeon", "choiaeri", "nunyo", "nano", "ruchel"];
-const FAN_CHARACTER_IDS = new Set(["puru", "nano", "bonhoro", "silong", "yauman", "pico"]);
+const FAN_CHARACTER_IDS = new Set(["jjangdori", "arangi", "golgoli", "maesili", "woori", "pico"]);
 const FAN_CHARACTER_ALIASES = new Map([
-  ["jjangdori", "puru"],
-  ["arangi", "nano"],
-  ["golgoli", "bonhoro"],
-  ["maesili", "silong"],
-  ["woori", "yauman"],
+  ["puru", "jjangdori"],
+  ["nano", "arangi"],
+  ["bonhoro", "golgoli"],
+  ["silong", "maesili"],
+  ["yauman", "woori"],
+  ["uri", "woori"],
 ]);
-const DEFAULT_FAN_CHARACTER_ID = "puru";
+const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
 const RESERVED_NICKNAMES = ["눈요", "설홍", "루첼", "나노", "최애리", "여우연"];
 const AI_NAMES = ["AI 루첼", "AI 나노", "AI 설홍", "AI 눈요", "AI 여우연", "AI 최애리"];
 const GAME_MODES = new Set(["normal", "hard"]);
@@ -54,7 +55,7 @@ const AI_DIFFICULTY_SETTINGS = {
 };
 const AI_MIN_BELL_REACTION_MS = 600;
 const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY_MS, CARD_REVEAL_HOLD_MS);
-const ASSETS_NOT_READY_MESSAGE = "이미지 로딩이 끝난 뒤 다시 시도해 주세요.";
+const ASSETS_NOT_READY_MESSAGE = "게임 자료 확인이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
 const EMOTES = {

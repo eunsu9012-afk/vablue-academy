@@ -1,0 +1,95 @@
+@charset "UTF-8";
+
+:root {
+  --bb-blue-900: #08206f;
+  --bb-blue-800: #0b3299;
+  --bb-blue-700: #1456d9;
+  --bb-blue-600: #1e6bff;
+  --bb-blue-500: #3b82ff;
+  --bb-blue-300: #9fc4ff;
+  --bb-blue-200: #cfe2ff;
+  --bb-blue-100: #eaf3ff;
+  --bb-blue-50: #f5f9ff;
+
+  --bb-navy: var(--bb-blue-900);
+  --bb-primary: var(--bb-blue-600);
+  --bb-primary-dark: var(--bb-blue-800);
+  --bb-primary-soft: var(--bb-blue-100);
+  --bb-sky: var(--bb-blue-100);
+  --bb-sky-2: var(--bb-blue-50);
+
+  --bb-gold-500: #f6b735;
+  --bb-gold-300: #ffe39a;
+  --bb-yellow: var(--bb-gold-300);
+  --bb-yellow-soft: #fff5cc;
+  --bb-green-500: #22b870;
+  --bb-red-500: #ef4444;
+  --bb-purple-500: #8b5cf6;
+  --bb-green: var(--bb-green-500);
+  --bb-red: var(--bb-red-500);
+  --bb-purple: var(--bb-purple-500);
+  --bb-danger: var(--bb-red-500);
+  --bb-success: var(--bb-green-500);
+  --bb-accent: #ff7da5;
+  --bb-mint: #7fe4c3;
+
+  --bb-text-main: #06185f;
+  --bb-text-sub: #486096;
+  --bb-text-muted: #7d8bad;
+  --bb-text: var(--bb-text-main);
+  --bb-muted: var(--bb-text-muted);
+
+  --bb-line: rgba(111, 159, 255, 0.35);
+  --bb-line-strong: rgba(30, 107, 255, 0.55);
+  --bb-border: var(--bb-line);
+  --bb-border-strong: var(--bb-line-strong);
+
+  --bb-panel: rgba(255, 255, 255, 0.9);
+  --bb-panel-solid: #ffffff;
+  --bb-bg: linear-gradient(135deg, #f7fbff 0%, #eaf4ff 50%, #fff3f8 100%);
+
+  --bb-radius-xs: 8px;
+  --bb-radius-sm: 12px;
+  --bb-radius-md: 16px;
+  --bb-radius-lg: 22px;
+  --bb-radius-xl: 30px;
+
+  --bb-shadow-sm: 0 4px 12px rgba(35, 83, 160, 0.1);
+  --bb-shadow-md: 0 10px 28px rgba(35, 83, 160, 0.14);
+  --bb-shadow-lg: 0 18px 48px rgba(35, 83, 160, 0.18);
+  --bb-shadow-button: 0 10px 22px rgba(30, 107, 255, 0.24);
+
+  --bb-font-main: system-ui, -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", sans-serif;
+  --bb-title-size: clamp(26px, 3vw, 42px);
+  --bb-section-title-size: clamp(18px, 1.6vw, 24px);
+  --bb-body-size: 15px;
+  --bb-caption-size: 12px;
+  --bb-button-text-size: 14px;
+
+  --bb-app-max-width: 1440px;
+  --bb-mobile-max-width: 767px;
+  --bb-header-h: 76px;
+  --bb-mobile-header-h: 64px;
+  --bb-touch-min: 44px;
+  --bb-button-h: 46px;
+  --bb-gap-xs: 6px;
+  --bb-gap-sm: 10px;
+  --bb-gap-md: 16px;
+  --bb-gap-lg: 24px;
+  --bb-gap-xl: 32px;
+  --bb-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --bb-breakpoint-mobile: 767px;
+  --bb-breakpoint-tablet-min: 768px;
+  --bb-breakpoint-tablet-max: 1023px;
+  --bb-breakpoint-pc: 1024px;
+  --bb-breakpoint-game-pc: 1280px;
+
+  --bb-z-base: 0;
+  --bb-z-panel: 10;
+  --bb-z-dropdown: 80;
+  --bb-z-modal: 200;
+  --bb-z-toast: 260;
+  --bb-z-tutorial: 280;
+  --bb-z-loading: 320;
+}

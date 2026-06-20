@@ -1,0 +1,100 @@
+@charset "UTF-8";
+
+.bb-app,
+.app-shell {
+  min-width: 0;
+  color: var(--bb-text-main);
+}
+
+.bb-page,
+main,
+.bb-main,
+.screen,
+.bb-screen,
+.bb-section,
+.bb-side,
+.bb-mobile-stack {
+  min-width: 0;
+}
+
+.bb-main {
+  width: min(100%, var(--bb-app-max-width));
+  margin-inline: auto;
+}
+
+.bb-side {
+  min-height: 0;
+}
+
+.bb-mobile-stack {
+  display: grid;
+  gap: var(--bb-gap-md);
+}
+
+.bb-section {
+  display: grid;
+  gap: var(--bb-gap-md);
+}
+
+.bb-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bb-gap-sm);
+  min-width: 0;
+}
+
+.bb-section-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--bb-text-main);
+  font-size: var(--bb-section-title-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-empty-state {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  padding: var(--bb-gap-lg);
+  color: var(--bb-text-muted);
+  text-align: center;
+}
+
+.bb-scroll-area {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(30, 107, 255, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+.bb-no-overflow,
+.bb-safe-box {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bb-truncate,
+.bb-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-clamp-2,
+.bb-clamp-3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.bb-clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.bb-clamp-3 {
+  -webkit-line-clamp: 3;
+}

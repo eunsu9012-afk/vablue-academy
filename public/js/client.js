@@ -489,19 +489,36 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function displayName(player) {
+function safeText(value, fallback = "") {
+  return escapeHtml(value == null || value === "" ? fallback : value);
+}
+
+function getDisplayPlayerName(player) {
   return player?.displayName || player?.nickname || "";
 }
 
+function displayName(player) {
+  return getDisplayPlayerName(player);
+}
+
+function isAiPlayer(player) {
+  return Boolean(player?.isAI);
+}
+
+// Fan-character helpers are display-only. They must never feed game card counts.
 function normalizeFanCharacterId(value) {
   const rawId = String(value || "").trim();
   const id = FAN_CHARACTER_ALIASES.get(rawId) || rawId;
   return FAN_CHARACTER_IDS.has(id) ? id : DEFAULT_FAN_CHARACTER_ID;
 }
 
-function fanCharacterById(value) {
+function getFanCharacterById(value) {
   const id = normalizeFanCharacterId(value);
   return FAN_CHARACTERS.find((character) => character.id === id) || FAN_CHARACTERS[0];
+}
+
+function fanCharacterById(value) {
+  return getFanCharacterById(value);
 }
 
 function fanCharacterInitial(character) {
@@ -542,7 +559,7 @@ function saveFanCharacterId(value) {
 }
 
 function renderFanAvatar(entity, size = "sm") {
-  if (!entity || entity.isAI) return "";
+  if (!entity || isAiPlayer(entity)) return "";
   const character = fanCharacterById(entity.avatarId || entity.fanCharacterId || state.fanCharacterId);
   const initial = fanCharacterInitial(character);
   return `
@@ -552,13 +569,28 @@ function renderFanAvatar(entity, size = "sm") {
   `;
 }
 
-function renderAIAvatar() {
+function renderAiBadge() {
   return `<span class="bb-avatar bb-avatar-ai" aria-hidden="true">AI</span>`;
+}
+
+function renderAIAvatar() {
+  return renderAiBadge();
+}
+
+function renderPlayerAvatar(player, options = {}) {
+  const size = options.size || "sm";
+  return isAiPlayer(player) ? renderAiBadge(options) : renderFanAvatar(player, size);
+}
+
+function renderUserBadge(player) {
+  if (isAiPlayer(player)) return `<span class="bb-badge bb-badge-ai">AI</span>`;
+  if (player?.isHost) return `<span class="bb-badge bb-badge-host">HOST</span>`;
+  return "";
 }
 
 function renderName(player) {
   const className = player?.isVaNickname ? "va-name" : "";
-  const avatarMarkup = player?.isAI ? renderAIAvatar() : renderFanAvatar(player);
+  const avatarMarkup = renderPlayerAvatar(player, { size: "sm" });
   return `<span class="name-with-avatar">${avatarMarkup}${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span></span>`;
 }
 

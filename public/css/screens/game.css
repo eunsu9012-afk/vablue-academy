@@ -1,0 +1,7 @@
+@charset "UTF-8";
+
+/* Stage 6 target: 게임화면 디자인.png
+   TODO:
+   - PC game screen starts at 1280px: board, 6 player seats, bell, side panel.
+   - Mobile game screen prioritizes deck/open cards/bell and folds secondary info.
+   - Player avatars must never reduce card or bell hit areas. */

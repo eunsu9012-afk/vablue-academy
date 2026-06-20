@@ -1,0 +1,246 @@
+@charset "UTF-8";
+
+.bb-header,
+.topbar {
+  min-width: 0;
+}
+
+.bb-brand,
+.brand {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bb-logo,
+.brand-mark {
+  flex: 0 0 auto;
+}
+
+.bb-title,
+.bb-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-subtitle {
+  color: var(--bb-text-sub);
+  font-size: var(--bb-caption-size);
+}
+
+.bb-panel,
+.panel,
+.modal-card,
+.tutorial-card,
+.game-info-panel {
+  min-width: 0;
+  border: 1px solid var(--bb-line);
+  border-radius: var(--bb-radius-lg);
+  background: var(--bb-panel);
+  box-shadow: var(--bb-shadow-sm);
+}
+
+.bb-card,
+.card,
+.room-card,
+.game-info-card,
+.result-box,
+.waiting-player {
+  min-width: 0;
+  border: 1px solid var(--bb-line);
+  border-radius: var(--bb-radius-md);
+  background: var(--bb-panel-solid);
+  box-shadow: var(--bb-shadow-sm);
+}
+
+.bb-button,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.mini-button,
+.icon-button,
+.modal-close-button,
+.game-info-toggle,
+.mobile-game-info-toggle {
+  min-width: var(--bb-touch-min);
+  min-height: var(--bb-touch-min);
+  border-radius: var(--bb-radius-sm);
+  font-size: var(--bb-button-text-size);
+}
+
+.bb-button-primary,
+.primary-button {
+  border-color: var(--bb-line-strong);
+  background: linear-gradient(180deg, var(--bb-blue-500), var(--bb-blue-600));
+  color: #fff;
+  box-shadow: var(--bb-shadow-button);
+}
+
+.bb-button-secondary,
+.secondary-button,
+.ghost-button,
+.mini-button {
+  border-color: var(--bb-line);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--bb-blue-900);
+}
+
+.bb-button-warning {
+  border-color: rgba(246, 183, 53, 0.58);
+  background: linear-gradient(180deg, #fff4c7, var(--bb-gold-300));
+  color: #725000;
+}
+
+.bb-button-danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(180deg, #ff8b9a, var(--bb-red-500));
+  color: #fff;
+}
+
+.bb-icon-button {
+  display: inline-grid;
+  width: var(--bb-touch-min);
+  height: var(--bb-touch-min);
+  place-items: center;
+}
+
+.bb-badge,
+.badge,
+.bb-pill,
+.pill,
+.player-badge,
+.host-inline,
+.current-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 22px;
+  overflow: hidden;
+  border: 1px solid var(--bb-line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: var(--bb-caption-size);
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-badge-ai,
+.badge.ai,
+.player-badge.ai,
+.bb-avatar-ai {
+  border-color: rgba(139, 92, 246, 0.35);
+  background: #f3efff;
+  color: #4c2db4;
+}
+
+.bb-badge-host,
+.host-inline {
+  border-color: rgba(246, 183, 53, 0.54);
+  background: #fff5cc;
+  color: #725000;
+}
+
+.bb-badge-ready,
+.badge.ready {
+  border-color: rgba(34, 184, 112, 0.42);
+  background: #e9fff4;
+  color: #087445;
+}
+
+.bb-badge-waiting,
+.badge.not-ready {
+  border-color: rgba(125, 139, 173, 0.35);
+  background: #f4f7fc;
+  color: var(--bb-text-sub);
+}
+
+.bb-avatar,
+.fan-avatar,
+.fan-character-image.bb-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--bb-line);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff, var(--bb-blue-100));
+  color: var(--bb-blue-700);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.bb-avatar-user {
+  box-shadow: 0 3px 10px rgba(30, 107, 255, 0.16);
+}
+
+.bb-avatar-ai {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+
+.bb-avatar-fallback,
+.fan-avatar.image-missing,
+.fan-character-image.image-missing {
+  background: linear-gradient(180deg, #fff, var(--bb-blue-200));
+}
+
+.fan-avatar-sm {
+  width: 26px;
+  height: 26px;
+}
+
+.fan-avatar-md {
+  width: 40px;
+  height: 40px;
+}
+
+.fan-avatar-lg {
+  width: 72px;
+  height: 72px;
+}
+
+.bb-avatar img,
+.fan-avatar img,
+.fan-character-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fan-avatar.image-missing::before,
+.fan-character-image.image-missing::before {
+  content: attr(data-avatar-initial);
+}
+
+.bb-list,
+.bb-table,
+.bb-accordion,
+.room-list,
+.online-users-list,
+.top-list,
+.game-user-info-list,
+.game-user-list,
+.reaction-speed-list,
+.result-score-list,
+.chat-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+}
+
+.bb-list-row {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bb-accordion-header,
+.bb-accordion-body {
+  min-width: 0;
+}

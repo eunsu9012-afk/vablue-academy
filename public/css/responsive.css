@@ -1,0 +1,83 @@
+@charset "UTF-8";
+
+@media (min-width: 1024px) {
+  .bb-app,
+  .app-shell {
+    --bb-current-breakpoint: pc;
+  }
+}
+
+@media (min-width: 1280px) {
+  body.is-game-screen .bb-game-shell,
+  body.is-game-screen .game-layout {
+    --bb-current-game-breakpoint: pc-game;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .bb-app,
+  .app-shell {
+    --bb-current-breakpoint: tablet;
+  }
+
+  .lobby-grid,
+  .room-layout,
+  .game-layout {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .bb-app,
+  .app-shell {
+    --bb-current-breakpoint: mobile;
+    padding-bottom: var(--bb-safe-bottom);
+  }
+
+  .screen,
+  .bb-screen {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  button,
+  .bb-button,
+  .primary-button,
+  .secondary-button,
+  .ghost-button,
+  .icon-button {
+    min-width: var(--bb-touch-min);
+    min-height: var(--bb-touch-min);
+  }
+
+  .room-list,
+  .online-users-list {
+    max-height: min(58vh, 520px);
+  }
+
+  .reaction-speed-list,
+  .game-user-info-list,
+  .result-score-list {
+    max-height: min(38vh, 300px);
+  }
+
+  body.is-mobile .mobile-touch-hint {
+    bottom: calc(var(--bb-safe-bottom) + clamp(72px, 16vh, 132px));
+    opacity: 0.92;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-overlay {
+    position: static;
+    width: auto;
+    margin: 8px;
+    transform: none;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-guide-panel {
+    max-height: none;
+  }
+
+  body.is-mobile.is-tutorial-game .tutorial-guide-panel .tutorial-message {
+    max-height: 4.2em;
+  }
+}

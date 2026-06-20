@@ -1,0 +1,7 @@
+@charset "UTF-8";
+
+/* Stage 4 target: 튜토리얼 디자인.png
+   TODO:
+   - Separate tutorial explanation layout from live game controls.
+   - Never place guide text over deck cards, open cards, or the bell button.
+   - Long explanations must scroll or clamp inside their own panel. */

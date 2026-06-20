@@ -1,0 +1,7 @@
+@charset "UTF-8";
+
+/* Stage 5 target: 게임 대기실 디자인.png
+   TODO:
+   - PC: 6 player slots plus room settings/chat/help side area.
+   - Mobile: compact 2-column/list player slots and fixed primary actions.
+   - Human players show fan avatars; AI slots show AI badges only. */

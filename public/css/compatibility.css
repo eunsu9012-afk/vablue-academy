@@ -1,0 +1,196 @@
+@charset "UTF-8";
+
+/* Stage 1 compatibility guards for the existing DOM.
+   These are intentionally broad safety rules, not final screen redesigns. */
+
+.screen,
+.panel,
+.card,
+.room-card,
+.player-zone,
+.player-card-shell,
+.game-info-card,
+.ranking-panel,
+.online-users-panel,
+.modal-card,
+.result-card,
+.tutorial-card,
+.reaction-speed-list,
+.game-user-list,
+.chat-panel,
+.game-layout,
+.game-board,
+.game-players,
+.card-stack,
+.deck-slot,
+.pile-slot {
+  min-width: 0;
+}
+
+.screen *,
+.panel *,
+.card *,
+.room-card *,
+.player-zone *,
+.player-card-shell *,
+.game-info-card *,
+.ranking-panel *,
+.online-users-panel *,
+.modal-card *,
+.result-card *,
+.tutorial-card * {
+  min-width: 0;
+}
+
+.brand,
+.bb-brand,
+.room-title,
+.room-card h3,
+.room-card .hint-text,
+.online-user-name,
+.context-title,
+.player-name,
+.player-name .name-with-avatar,
+.waiting-player h3,
+.game-user-info strong,
+.reaction-player,
+.top-list li,
+.result-score-list strong,
+.fan-character-option strong,
+.mobile-section-toggle,
+.guide-title-toggle,
+.bell-log,
+.toast {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-card .room-meta,
+.tutorial-message,
+.tutorial-card p,
+.result-box .hint-text {
+  overflow-wrap: anywhere;
+}
+
+.room-list,
+.online-users-list,
+.top-list,
+.game-user-info-list,
+.game-user-list,
+.reaction-speed-list,
+.result-score-list,
+.chat-panel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(30, 107, 255, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+.room-list {
+  max-height: min(62vh, 680px);
+}
+
+.online-users-list {
+  max-height: min(52vh, 520px);
+}
+
+.top-list {
+  max-height: 184px;
+}
+
+.reaction-speed-list {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reaction-speed-list li:not(.empty-info) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  overflow: hidden;
+}
+
+.reaction-rank,
+.reaction-time,
+.reaction-speed-list strong {
+  min-width: max-content;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction-player {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gameInfoPanel .game-user-info-list,
+.mobile-game-info-details .game-user-info-list {
+  max-height: 100%;
+}
+
+.game-user-info {
+  overflow: hidden;
+}
+
+.game-user-main {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.game-user-meta,
+.game-user-info span,
+.result-score-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-overlay,
+.tutorial-message,
+.mobile-touch-hint,
+.tutorial-guide-panel {
+  pointer-events: none;
+}
+
+.tutorial-guide-panel {
+  max-height: min(34vh, 280px);
+  overflow: hidden;
+}
+
+.tutorial-guide-panel .tutorial-message {
+  max-height: 5.4em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tutorial-guide-panel button,
+.tutorial-guide-panel .tutorial-actions,
+.tutorial-guide-panel .tutorial-actions * {
+  pointer-events: auto;
+}
+
+body.is-tutorial-game .tutorial-overlay {
+  left: auto;
+  right: 18px;
+  bottom: 18px;
+  width: min(360px, calc(100vw - 36px));
+  transform: none;
+}
+
+@media (min-width: 1280px) {
+  body.is-tutorial-game .tutorial-overlay {
+    top: calc(var(--bb-header-h, 76px) + 18px);
+    right: 24px;
+    bottom: auto;
+    width: min(360px, 24vw);
+    max-height: calc(100vh - var(--bb-header-h, 76px) - 42px);
+  }
+}
