@@ -228,6 +228,7 @@ function showScreen(name) {
     element.classList.toggle("hidden", screenName !== name);
   });
   state.activeScreen = name;
+  document.body.classList.toggle("is-game-screen", name === "game");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
   const gameHud = $("#gameHud");
@@ -1419,12 +1420,12 @@ function renderRoom(room) {
 function getSeatPosition(index, count) {
   if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
-    1: [{ left: 50, top: 50 }],
+    1: [{ left: 50, top: 79 }],
     2: [{ left: 24, top: 50 }, { left: 76, top: 50 }],
-    3: [{ left: 50, top: 21 }, { left: 24, top: 79 }, { left: 76, top: 79 }],
-    4: [{ left: 28, top: 22 }, { left: 72, top: 22 }, { left: 28, top: 78 }, { left: 72, top: 78 }],
-    5: [{ left: 20, top: 21 }, { left: 50, top: 21 }, { left: 80, top: 21 }, { left: 35, top: 79 }, { left: 65, top: 79 }],
-    6: [{ left: 18, top: 21 }, { left: 50, top: 21 }, { left: 82, top: 21 }, { left: 18, top: 79 }, { left: 50, top: 79 }, { left: 82, top: 79 }],
+    3: [{ left: 30, top: 23 }, { left: 70, top: 23 }, { left: 50, top: 79 }],
+    4: [{ left: 24, top: 23 }, { left: 76, top: 23 }, { left: 24, top: 79 }, { left: 76, top: 79 }],
+    5: [{ left: 18, top: 23 }, { left: 50, top: 23 }, { left: 82, top: 23 }, { left: 34, top: 79 }, { left: 66, top: 79 }],
+    6: [{ left: 18, top: 23 }, { left: 50, top: 23 }, { left: 82, top: 23 }, { left: 18, top: 79 }, { left: 50, top: 79 }, { left: 82, top: 79 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
@@ -1515,13 +1516,23 @@ function createPlayerZone(playerId) {
   zone.className = "player-zone";
   zone.dataset.playerId = playerId;
   zone.innerHTML = `
-    <header class="player-head">
-      <div class="player-name"></div>
-      <div class="score"></div>
-    </header>
-    <div class="card-stack">
-      <div class="deck-slot"></div>
-      <div class="pile-slot"></div>
+    <div class="player-card-shell">
+      <header class="player-head">
+        <div class="player-identity">
+          <div class="player-name"></div>
+          <div class="player-status-row"></div>
+        </div>
+        <div class="score-wrap" aria-label="점수">
+          <span class="score-icon" aria-hidden="true">🏆</span>
+          <div class="score"></div>
+        </div>
+      </header>
+      <div class="player-card-body">
+        <div class="card-stack" aria-label="플레이어 카드">
+          <div class="deck-slot" data-slot-label="덱"></div>
+          <div class="pile-slot" data-slot-label="공개"></div>
+        </div>
+      </div>
     </div>
     <div class="score-delta-layer" aria-hidden="true"></div>
     <div class="eliminated-badge">탈락</div>
@@ -1613,10 +1624,14 @@ function renderGame(game) {
       wrap.appendChild(zone);
     }
     seenPlayers.add(player.id);
+    zone.dataset.seatIndex = String(index + 1);
     zone.style.left = `${seat.left}%`;
     zone.style.top = `${seat.top}%`;
     zone.classList.toggle("current-turn", player.id === game.currentTurnPlayerId);
     zone.classList.toggle("eliminated", player.spectator || player.eliminated);
+    zone.classList.toggle("self-player", player.id === game.selfPlayerId);
+    zone.classList.toggle("ai-player", Boolean(player.isAI));
+    zone.classList.toggle("spectator-player", Boolean(player.spectator));
 
     const isSelf = player.id === game.selfPlayerId;
     const canFlip = isSelf && isFlipAvailable(game);
@@ -1624,7 +1639,13 @@ function renderGame(game) {
     const turnChip = player.id === game.currentTurnPlayerId
       ? `<span class="current-turn-chip">${isSelf ? "내 차례" : "차례"}</span>`
       : "";
+    const statusBadges = [
+      isSelf ? `<span class="player-badge self">나</span>` : "",
+      player.isAI ? `<span class="player-badge ai">AI</span>` : "",
+      player.spectator ? `<span class="player-badge spectator">관전</span>` : "",
+    ].filter(Boolean).join("");
     zone.querySelector(".player-name").innerHTML = `${renderName(player)} ${renderHostBadge(player)} ${turnChip}`;
+    zone.querySelector(".player-status-row").innerHTML = statusBadges;
     zone.querySelector(".score").textContent = player.score;
 
     const deckSlot = zone.querySelector(".deck-slot");
@@ -1649,6 +1670,15 @@ function renderGame(game) {
 
 function renderGameInfoPanel(game) {
   ensureMobileGameInfoMarkup();
+  const panel = $("#gameInfoPanel");
+  if (panel) {
+    panel.classList.add("pc-game-info-panel");
+    panel.querySelectorAll(".game-info-card").forEach((card, index) => {
+      card.classList.toggle("reaction-info-card", index === 0);
+      card.classList.toggle("users-info-card", index === 1);
+      card.classList.toggle("latency-info-card", index === 2);
+    });
+  }
   renderReactionSpeeds(game.recentReactionSpeeds || []);
   renderReactionSpeeds(game.recentReactionSpeeds || [], "#mobileReactionSpeedList");
   renderGameUsers(game.players || []);
@@ -1665,9 +1695,19 @@ function renderReactionSpeeds(rows, selector = "#reactionSpeedList") {
     list.innerHTML = `<li class="empty-info">정답 대기 중</li>`;
     return;
   }
+  if (selector !== "#reactionSpeedList") {
+    list.innerHTML = topRows.map((row, index) => `
+      <li>
+        <span>${index + 1}위 ${escapeHtml(formatReactionPlayerName(row))}</span>
+        <strong>${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
+      </li>
+    `).join("");
+    return;
+  }
   list.innerHTML = topRows.map((row, index) => `
-    <li>
-      <span>${index + 1}위 ${escapeHtml(formatReactionPlayerName(row))}</span>
+    <li class="${index === 0 ? "is-best" : ""}">
+      <span class="reaction-rank">${index + 1}위</span>
+      <span class="reaction-player">${escapeHtml(formatReactionPlayerName(row))}</span>
       <strong>${(Number(row.reactionMs || 0) / 1000).toFixed(3)}s</strong>
     </li>
   `).join("");
@@ -1689,10 +1729,21 @@ function renderGameUsers(players, selector = "#gameUserInfoList") {
       : player.isAI
         ? `AI ${aiDifficultyLabel(player.aiDifficulty)}`
         : `${Number(stats.wins || 0)}승 ${Number(stats.losses || 0)}패 ${formatWinRate(stats.winRate)}`;
+    if (selector !== "#gameUserInfoList") {
+      return `
+        <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
+          <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
+          <span>${escapeHtml(meta)}</span>
+        </article>
+      `;
+    }
     return `
       <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
-        <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
-        <span>${escapeHtml(meta)}</span>
+        <div class="game-user-main">
+          <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
+          <span class="game-user-state-dot" aria-hidden="true"></span>
+        </div>
+        <span class="game-user-meta">${escapeHtml(meta)}</span>
       </article>
     `;
   }).join("");
