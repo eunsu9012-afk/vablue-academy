@@ -35,16 +35,16 @@ const CARD_TOTAL_WEIGHTS = [
   { count: 4, weight: 15 },
   { count: 5, weight: 5 },
 ];
-const AI_CORRECT_MISS_PROBABILITY = 0.1;
 const AI_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced", "tutorial"]);
 const DEFAULT_AI_DIFFICULTY = "intermediate";
 const AI_DIFFICULTY_SETTINGS = {
-  beginner: { label: "초급", correctDelay: [1000, 1800], mistakeChance: 0.04 },
-  intermediate: { label: "중급", correctDelay: [700, 1300], mistakeChance: 0.03 },
-  advanced: { label: "고급", correctDelay: [450, 900], mistakeChance: 0.02 },
-  tutorial: { label: "튜토리얼", correctDelay: [9000, 14000], mistakeChance: 0 },
+  beginner: { label: "초급", correctDelay: [1300, 2200] },
+  intermediate: { label: "중급", correctDelay: [900, 1600] },
+  advanced: { label: "고급", correctDelay: [600, 1100] },
+  tutorial: { label: "튜토리얼", correctDelay: [9000, 14000] },
 };
-const AI_MIN_BELL_REACTION_MS = 300;
+const AI_MIN_BELL_REACTION_MS = 600;
+const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY_MS, CARD_REVEAL_HOLD_MS);
 const ASSETS_NOT_READY_MESSAGE = "이미지 로딩이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
@@ -938,11 +938,7 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
 function clearRoomTimers(room) {
   clearStartCountdown(room);
   if (!room?.game) return;
-  for (const timer of room.game.aiTimers) {
-    clearTimeout(timer);
-    clearInterval(timer);
-  }
-  room.game.aiTimers = [];
+  clearAITimers(room);
   if (room.game.resultTimer) clearTimeout(room.game.resultTimer);
   if (room.game.turnTimer) clearTimeout(room.game.turnTimer);
   if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
@@ -951,6 +947,15 @@ function clearRoomTimers(room) {
   room.game.turnTimer = null;
   room.game.roundTimer = null;
   room.game.revealTimer = null;
+}
+
+function clearAITimers(room) {
+  if (!room?.game) return;
+  for (const timer of room.game.aiTimers) {
+    clearTimeout(timer);
+    clearInterval(timer);
+  }
+  room.game.aiTimers = [];
 }
 
 function randomInt(min, max) {
@@ -1214,26 +1219,6 @@ function verifyOpenPileStability(room, newestCardId) {
       }
     }
   }
-}
-
-function analyzeAIMistakeRisk(room, verdict) {
-  const cards = topCards(room);
-  const counts = Object.values(verdict.totals).map((value) => Number(value || 0));
-  const totalVisibleItems = cards.reduce((sum, card) => sum + (card.items?.length || 0), 0);
-  const complexCards = cards.filter((card) => (card.items?.length || 0) >= 3).length;
-  const recentOpenAge = Date.now() - (room.game?.lastCardOpenedAt || 0);
-  const reasons = [];
-
-  if (counts.some((count) => count === 4)) reasons.push("near-five");
-  if (counts.some((count) => count >= 6)) reasons.push("over-five");
-  if (room.mode === "hard" && complexCards >= 2) reasons.push("hard-complex");
-  if (totalVisibleItems >= 12 || (cards.length >= 4 && totalVisibleItems >= 10)) reasons.push("crowded-table");
-  if (recentOpenAge >= 0 && recentOpenAge <= 800) reasons.push("recent-open");
-
-  return {
-    allowed: reasons.includes("recent-open") && reasons.some((reason) => reason !== "recent-open"),
-    reasons,
-  };
 }
 
 function nextAlivePlayerId(room, fromPlayerId) {
@@ -1747,6 +1732,7 @@ function handleBell(room, bellRinger) {
 
   clearTurnTimer(room);
   clearRevealTimer(room);
+  clearAITimers(room);
   room.game.bellLocked = true;
   const verdict = evaluateBell(room);
   room.game.matchedCharacters = verdict.correct ? verdict.matchedCharacters : [];
@@ -1824,6 +1810,7 @@ function handleTurnTimeout(room, playerId) {
   if (!player || player.spectator || player.eliminated) return;
 
   clearTurnTimer(room);
+  clearAITimers(room);
   room.game.bellLocked = true;
   room.game.matchedCharacters = [];
   room.game.wrongFlash = true;
@@ -1900,49 +1887,61 @@ function scheduleAITurn(room) {
   pushAITimer(room, timer);
 }
 
+function roomAssetsReadyForAI(room) {
+  return getHumanPlayers(room).every((player) => player.assetsReady);
+}
+
+function getAIBellReactionDelay(room) {
+  const [minDelay, maxDelay] = getAIDifficultySettings(room).correctDelay;
+  return Math.max(AI_CARD_READ_DELAY_MS, randomInt(minDelay, maxDelay));
+}
+
 function scheduleAIBell(room) {
+  if (!room || room.status !== "playing" || !room.game || room.game.bellLocked) return;
+  if (!roomAssetsReadyForAI(room)) return;
   if (topCards(room).length === 0) return;
   if (room.game.aiBellScheduledForVersion === room.game.tableVersion) return;
-  room.game.aiBellScheduledForVersion = room.game.tableVersion;
 
-  const verdict = evaluateBell(room);
-  if (room.isTutorial && verdict.correct) return;
-  const mistakeRisk = analyzeAIMistakeRisk(room, verdict);
-  const difficulty = getAIDifficultySettings(room);
-  const aiPlayers = getActivePlayers(room).filter((player) => player.isAI);
-  for (const ai of aiPlayers) {
-    const correctMissProbability = room.isTutorial ? 0.9 : AI_CORRECT_MISS_PROBABILITY;
-    if (verdict.correct && Math.random() < correctMissProbability) continue;
-    if (!verdict.correct) {
-      if (room.isTutorial) continue;
-      if (!mistakeRisk.allowed) continue;
-      if (Math.random() >= difficulty.mistakeChance) continue;
-    }
+  const tableVersion = room.game.tableVersion;
+  const openedAt = Number(room.game.lastCardOpenedAt || Date.now());
+  const readDelay = Math.max(0, openedAt + AI_CARD_READ_DELAY_MS - Date.now());
+  room.game.aiBellScheduledForVersion = tableVersion;
 
-    const [correctMin, correctMax] = difficulty.correctDelay;
-    const delay = verdict.correct
-      ? Math.max(TURN_START_DELAY_MS, AI_MIN_BELL_REACTION_MS, randomInt(correctMin, correctMax))
-      : Math.max(TURN_START_DELAY_MS, randomInt(300, 800));
-    const aiId = ai.id;
-    const tableVersion = room.game.tableVersion;
-    if (!verdict.correct) {
-      logEvent("AI mistake scheduled", `player=${ai.nickname} reasons=[${mistakeRisk.reasons.join(",")}] delay=${delay}ms`);
+  const readTimer = setTimeout(() => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom?.game || liveRoom.status !== "playing") return;
+    if (liveRoom.game.bellLocked || liveRoom.game.tableVersion !== tableVersion) return;
+    if (!roomAssetsReadyForAI(liveRoom)) return;
+
+    const verdict = evaluateBell(liveRoom);
+    if (!verdict.correct || liveRoom.isTutorial) return;
+
+    const aiPlayers = getActivePlayers(liveRoom).filter((player) => player.isAI);
+    for (const ai of aiPlayers) {
+      const aiId = ai.id;
+      const targetDelay = getAIBellReactionDelay(liveRoom);
+      const liveOpenedAt = Number(liveRoom.game.lastCardOpenedAt || Date.now());
+      const elapsedSinceOpen = Math.max(0, Date.now() - liveOpenedAt);
+      const delay = Math.max(0, targetDelay - elapsedSinceOpen);
+
+      const timer = setTimeout(() => {
+        const latestRoom = rooms.get(room.id);
+        if (!latestRoom?.game || latestRoom.status !== "playing") return;
+        if (latestRoom.game.bellLocked || latestRoom.game.tableVersion !== tableVersion) return;
+        if (!roomAssetsReadyForAI(latestRoom)) return;
+
+        const liveAI = findPlayer(latestRoom, aiId);
+        if (!liveAI || liveAI.spectator || liveAI.eliminated) return;
+
+        const latestVerdict = evaluateBell(latestRoom);
+        if (!latestVerdict.correct) return;
+
+        handleBell(latestRoom, liveAI);
+      }, delay);
+      pushAITimer(liveRoom, timer);
     }
-    const timer = setTimeout(() => {
-      const liveRoom = rooms.get(room.id);
-      if (!liveRoom?.game || liveRoom.status !== "playing") return;
-      if (liveRoom.game.tableVersion !== tableVersion) return;
-      const liveAI = findPlayer(liveRoom, aiId);
-      if (liveRoom.game.bellLocked) {
-        if (liveRoom.game.collectingCorrectReactions && recordCorrectReaction(liveRoom, liveAI)) {
-          emitGameState(liveRoom);
-        }
-        return;
-      }
-      handleBell(liveRoom, liveAI);
-    }, delay);
-    pushAITimer(room, timer);
-  }
+  }, readDelay);
+  pushAITimer(room, readTimer);
 }
 
 function joinRoomInternal(socket, room) {
