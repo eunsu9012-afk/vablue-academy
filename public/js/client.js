@@ -1421,11 +1421,11 @@ function getSeatPosition(index, count) {
   if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
     1: [{ left: 50, top: 81 }],
-    2: [{ left: 28, top: 50 }, { left: 72, top: 50 }],
-    3: [{ left: 34, top: 19 }, { left: 66, top: 19 }, { left: 50, top: 81 }],
-    4: [{ left: 28, top: 19 }, { left: 72, top: 19 }, { left: 28, top: 81 }, { left: 72, top: 81 }],
-    5: [{ left: 23, top: 19 }, { left: 50, top: 19 }, { left: 77, top: 19 }, { left: 37, top: 81 }, { left: 63, top: 81 }],
-    6: [{ left: 22, top: 19 }, { left: 50, top: 19 }, { left: 78, top: 19 }, { left: 22, top: 81 }, { left: 50, top: 81 }, { left: 78, top: 81 }],
+    2: [{ left: 29, top: 50 }, { left: 71, top: 50 }],
+    3: [{ left: 31, top: 19 }, { left: 69, top: 19 }, { left: 50, top: 81 }],
+    4: [{ left: 25, top: 19 }, { left: 75, top: 19 }, { left: 25, top: 81 }, { left: 75, top: 81 }],
+    5: [{ left: 21, top: 19 }, { left: 50, top: 19 }, { left: 79, top: 19 }, { left: 35.5, top: 81 }, { left: 64.5, top: 81 }],
+    6: [{ left: 21, top: 19 }, { left: 50, top: 19 }, { left: 79, top: 19 }, { left: 21, top: 81 }, { left: 50, top: 81 }, { left: 79, top: 81 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
@@ -1737,13 +1737,14 @@ function renderGameUsers(players, selector = "#gameUserInfoList") {
         </article>
       `;
     }
+    const metaClass = `game-user-meta ${player.isAI ? "game-user-meta-ai" : "game-user-meta-human"}`;
     return `
       <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
         <div class="game-user-main">
           <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
           <span class="game-user-state-dot" aria-hidden="true"></span>
         </div>
-        <span class="game-user-meta">${escapeHtml(meta)}</span>
+        <span class="${metaClass}">${escapeHtml(meta)}</span>
       </article>
     `;
   }).join("");
