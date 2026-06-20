@@ -14,6 +14,8 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, "public")));
 
 const CHARACTER_IDS = ["seolhong", "yeowooyeon", "choiaeri", "nunyo", "nano", "ruchel"];
+const FAN_CHARACTER_IDS = new Set(["jjangdori", "arangi", "golgoli", "maesili", "woori", "pico"]);
+const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
 const RESERVED_NICKNAMES = ["눈요", "설홍", "루첼", "나노", "최애리", "여우연"];
 const AI_NAMES = ["AI 루첼", "AI 나노", "AI 설홍", "AI 눈요", "AI 여우연", "AI 최애리"];
 const GAME_MODES = new Set(["normal", "hard"]);
@@ -87,7 +89,13 @@ function normalizeStatRecord(record = {}) {
     updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString(),
     lastNicknameChangeDate:
       typeof record.lastNicknameChangeDate === "string" ? record.lastNicknameChangeDate : "",
+    avatarId: normalizeFanCharacterId(record.avatarId || record.fanCharacterId),
   };
+}
+
+function normalizeFanCharacterId(value) {
+  const avatarId = String(value || "").trim();
+  return FAN_CHARACTER_IDS.has(avatarId) ? avatarId : DEFAULT_FAN_CHARACTER_ID;
 }
 
 function markUserdataDirty() {
@@ -187,7 +195,8 @@ async function initUserdata() {
 
 async function ensureStats(nickname) {
   if (!userdata.users[nickname]) {
-    userdata.users[nickname] = normalizeStatRecord();
+    const user = usersByNickname.get(nickname);
+    userdata.users[nickname] = normalizeStatRecord({ avatarId: user?.avatarId });
     saveUserdata();
   }
 }
@@ -205,6 +214,7 @@ function serializeRankRow(row, includeRate = false) {
     nickname: row.nickname,
     displayName: row.displayName,
     isVaNickname: row.isVaNickname,
+    avatarId: normalizeFanCharacterId(row.avatarId),
     wins: row.wins,
   };
   if (includeRate) base.winRate = row.winRate;
@@ -227,6 +237,20 @@ function refreshRankBadgeCache(topWins, topWinRates) {
 
 function getRankBadges(nickname) {
   return rankBadgeCache.get(nickname) || [];
+}
+
+function rememberUserAvatar(nickname, avatarId) {
+  if (!nickname) return normalizeFanCharacterId(avatarId);
+  const normalizedAvatarId = normalizeFanCharacterId(avatarId);
+  if (userdata.users[nickname]) {
+    const current = normalizeStatRecord(userdata.users[nickname]);
+    userdata.users[nickname] = {
+      ...current,
+      avatarId: normalizedAvatarId,
+    };
+    saveUserdata();
+  }
+  return normalizedAvatarId;
 }
 
 async function getRankings() {
@@ -328,6 +352,7 @@ function createHumanPlayer(user, isHost = false) {
     nickname: user.nickname,
     displayName: user.displayName,
     isVaNickname: user.isVaNickname,
+    avatarId: normalizeFanCharacterId(user.avatarId),
     isAI: false,
     socketId: user.socketId,
     ready: false,
@@ -499,6 +524,7 @@ function getOnlineUsersPayload() {
         nickname: user.nickname,
         displayName: user.displayName,
         isVaNickname: user.isVaNickname,
+        avatarId: normalizeFanCharacterId(user.avatarId),
         rankBadges: getRankBadges(user.nickname),
         status,
         statusLabel,
@@ -522,6 +548,7 @@ async function makeLobbyPayload(nickname) {
       nickname: profile.nickname,
       displayName: profile.displayName,
       isVaNickname: profile.isVaNickname,
+      avatarId: normalizeFanCharacterId(usersByNickname.get(profile.nickname)?.avatarId || userdata.users[profile.nickname]?.avatarId),
       rankBadges: getRankBadges(profile.nickname),
     },
     myStats: stats,
@@ -569,6 +596,7 @@ function serializeRoom(room, selfPlayerId = null) {
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      avatarId: player.isAI ? null : normalizeFanCharacterId(player.avatarId),
       rankBadges: player.isAI ? [] : getRankBadges(player.nickname),
       isAI: player.isAI,
       aiDifficulty: player.isAI ? getAIDifficulty(room) : null,
@@ -618,6 +646,7 @@ function serializeGame(room, selfPlayerId = null) {
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      avatarId: player.isAI ? null : normalizeFanCharacterId(player.avatarId),
       rankBadges: player.isAI ? [] : getRankBadges(player.nickname),
       isAI: player.isAI,
       aiDifficulty: player.isAI ? getAIDifficulty(room) : null,
@@ -678,7 +707,9 @@ function attachSocketToUser(socket, user) {
   user.connected = true;
   user.disconnectedAt = null;
   user.assetsReady = Boolean(socket.data.assetsReady);
+  user.avatarId = normalizeFanCharacterId(user.avatarId || socket.data.avatarId);
   socket.data.nickname = user.nickname;
+  socket.data.avatarId = user.avatarId;
   if (user.reconnectTimer) {
     clearTimeout(user.reconnectTimer);
     user.reconnectTimer = null;
@@ -690,6 +721,7 @@ function syncPlayerIdentity(player, user) {
   player.nickname = user.nickname;
   player.displayName = user.displayName;
   player.isVaNickname = user.isVaNickname;
+  player.avatarId = normalizeFanCharacterId(user.avatarId);
   if (!player.isAI) player.assetsReady = Boolean(user.assetsReady);
 }
 
@@ -725,6 +757,7 @@ async function changeUserNickname(socket, nextNickname) {
 
   const nextRecord = {
     ...currentRecord,
+    avatarId: normalizeFanCharacterId(user.avatarId || currentRecord.avatarId),
     winRate: calculateWinRate(currentRecord.wins, currentRecord.losses),
     updatedAt: new Date().toISOString(),
     lastNicknameChangeDate: getServerDateKey(),
@@ -749,6 +782,7 @@ async function changeUserNickname(socket, nextNickname) {
     nickname,
     displayName,
     isVaNickname,
+    avatarId: normalizeFanCharacterId(user.avatarId),
     message: "닉네임이 변경되었습니다.",
   });
   logEvent("Nickname changed", `${currentNickname} -> ${nickname}`);
@@ -1179,6 +1213,7 @@ function recordCorrectReaction(room, player, reactedAt = Date.now()) {
       displayName: player.displayName,
       isAI: player.isAI,
       isVaNickname: player.isVaNickname,
+      avatarId: player.isAI ? null : normalizeFanCharacterId(player.avatarId),
       reactionMs,
     },
   ]
@@ -1300,6 +1335,7 @@ function finishTutorial(room, finisher = null, reason = "complete") {
       nickname: fallbackWinner.nickname,
       displayName: fallbackWinner.displayName,
       isVaNickname: fallbackWinner.isVaNickname,
+      avatarId: fallbackWinner.isAI ? null : normalizeFanCharacterId(fallbackWinner.avatarId),
       isAI: fallbackWinner.isAI,
     } : null,
     players: room.players.map((player) => ({
@@ -1307,6 +1343,7 @@ function finishTutorial(room, finisher = null, reason = "complete") {
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      avatarId: player.isAI ? null : normalizeFanCharacterId(player.avatarId),
       isAI: player.isAI,
       score: player.score,
       eliminated: player.eliminated,
@@ -1336,6 +1373,7 @@ async function finishGame(room, winner) {
       nickname: winner.nickname,
       displayName: winner.displayName,
       isVaNickname: winner.isVaNickname,
+      avatarId: winner.isAI ? null : normalizeFanCharacterId(winner.avatarId),
       isAI: winner.isAI,
     },
     players: room.players.map((player) => ({
@@ -1343,6 +1381,7 @@ async function finishGame(room, winner) {
       nickname: player.nickname,
       displayName: player.displayName,
       isVaNickname: player.isVaNickname,
+      avatarId: player.isAI ? null : normalizeFanCharacterId(player.avatarId),
       isAI: player.isAI,
       score: player.score,
       eliminated: player.eliminated,
@@ -2062,14 +2101,18 @@ async function handleDisconnect(socket) {
 io.on("connection", (socket) => {
   logEvent("Socket connected", socket.id);
 
-  socket.on("joinLobby", async ({ nickname } = {}) => {
+  socket.on("joinLobby", async ({ nickname, avatarId, fanCharacterId } = {}) => {
     const validation = validateNicknameForUse(nickname);
     if (!validation.ok) {
       socket.emit("nicknameError", validation.message);
       return;
     }
     const { nickname: cleanNickname, displayName, isVaNickname } = validation.profile;
+    const selectedAvatarId = rememberUserAvatar(cleanNickname, avatarId || fanCharacterId);
     const existing = usersByNickname.get(cleanNickname);
+
+    if (existing) existing.avatarId = selectedAvatarId;
+    socket.data.avatarId = selectedAvatarId;
 
     if (existing && handleReconnect(socket, cleanNickname, existing)) return;
 
@@ -2077,6 +2120,7 @@ io.on("connection", (socket) => {
       nickname: cleanNickname,
       displayName,
       isVaNickname,
+      avatarId: selectedAvatarId,
       socketId: socket.id,
       connected: true,
       roomId: null,

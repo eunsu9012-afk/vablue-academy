@@ -9,6 +9,19 @@ const CHARACTER_ASSETS = {
   ruchel: "/assets/characters/ruchel.png",
 };
 
+const FAN_CHARACTERS = [
+  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
+  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
+  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
+  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
+  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
+];
+const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
+const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
+const FAN_CHARACTER_STORAGE_KEY = "babyblue-fan-character-id";
+const RANDOM_NICKNAMES = ["푸른별", "스포처", "벨친구", "카드왕", "블루링", "하늘종"];
+
 const CARD_BACK_ASSET = "/assets/cards/back.png";
 const VICTORY_SOUND_ASSET = "/assets/sounds/victory.mp3";
 const BELL_SOUND_ASSET = "/assets/sounds/bell.mp3";
@@ -71,6 +84,7 @@ const screens = {
 
 const state = {
   nickname: "",
+  fanCharacterId: DEFAULT_FAN_CHARACTER_ID,
   lobby: null,
   room: null,
   game: null,
@@ -209,10 +223,12 @@ const TUTORIAL_STEPS = [
 ];
 
 function showScreen(name) {
+  const previousScreen = state.activeScreen;
   Object.entries(screens).forEach(([screenName, element]) => {
     element.classList.toggle("hidden", screenName !== name);
   });
   state.activeScreen = name;
+  if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
@@ -324,8 +340,45 @@ function scheduleFlipAvailabilityRefresh(game = state.game) {
 
 function updateMobileMode() {
   document.body.classList.toggle("is-mobile", isMobileMode());
+  ensureMobileLobbyAccordions();
   updateMobileGameInfoPanel();
   updateMobileTouchHint();
+}
+
+function setupMobileLobbySection(panel, label, expandedByDefault = true) {
+  if (!panel || panel.dataset.mobileAccordion === "true") return;
+  panel.dataset.mobileAccordion = "true";
+  panel.classList.add("mobile-lobby-collapsible");
+  panel.classList.toggle("mobile-collapsed", !expandedByDefault);
+
+  let button = panel.querySelector(".mobile-section-toggle");
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.className = "mobile-section-toggle";
+    const titleRow = panel.querySelector(".section-title-row");
+    if (titleRow) titleRow.appendChild(button);
+    else panel.insertBefore(button, panel.firstChild);
+  }
+
+  const sync = () => {
+    const expanded = !panel.classList.contains("mobile-collapsed");
+    button.textContent = `${label} ${expanded ? "▲" : "▼"}`;
+    button.setAttribute("aria-expanded", String(expanded));
+  };
+  sync();
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    panel.classList.toggle("mobile-collapsed");
+    sync();
+  });
+}
+
+function ensureMobileLobbyAccordions() {
+  if (!screens.lobby) return;
+  setupMobileLobbySection(screens.lobby.querySelector(".room-list-panel"), "게임방 목록", true);
+  setupMobileLobbySection(screens.lobby.querySelector(".compact-panel"), "내 전적", true);
+  setupMobileLobbySection(screens.lobby.querySelector(".ranking-panel"), "서버 TOP3", false);
 }
 
 function updateMobileTouchHint(game = state.game) {
@@ -430,9 +483,37 @@ function displayName(player) {
   return player?.displayName || player?.nickname || "";
 }
 
+function normalizeFanCharacterId(value) {
+  return FAN_CHARACTER_IDS.has(value) ? value : DEFAULT_FAN_CHARACTER_ID;
+}
+
+function fanCharacterById(value) {
+  const id = normalizeFanCharacterId(value);
+  return FAN_CHARACTERS.find((character) => character.id === id) || FAN_CHARACTERS[0];
+}
+
+function getStoredFanCharacterId() {
+  return normalizeFanCharacterId(localStorage.getItem(FAN_CHARACTER_STORAGE_KEY));
+}
+
+function saveFanCharacterId(value) {
+  state.fanCharacterId = normalizeFanCharacterId(value);
+  localStorage.setItem(FAN_CHARACTER_STORAGE_KEY, state.fanCharacterId);
+}
+
+function renderFanAvatar(entity, size = "sm") {
+  if (!entity || entity.isAI) return "";
+  const character = fanCharacterById(entity.avatarId || entity.fanCharacterId || state.fanCharacterId);
+  return `
+    <span class="fan-avatar fan-avatar-${size}" title="${escapeHtml(character.name)}">
+      <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" loading="lazy" decoding="async" onerror="this.remove()" />
+    </span>
+  `;
+}
+
 function renderName(player) {
   const className = player?.isVaNickname ? "va-name" : "";
-  return `${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span>`;
+  return `<span class="name-with-avatar">${renderFanAvatar(player)}${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span></span>`;
 }
 
 function renderRankBadges(player) {
@@ -443,6 +524,63 @@ function renderRankBadges(player) {
 
 function renderHostBadge(player) {
   return player?.isHost && !player?.isAI ? `<span class="host-inline">👑 방장</span>` : "";
+}
+
+function updateFanCharacterPicker() {
+  document.querySelectorAll(".fan-character-option").forEach((button) => {
+    const selected = button.dataset.avatarId === state.fanCharacterId;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+}
+
+function selectFanCharacter(avatarId) {
+  saveFanCharacterId(avatarId);
+  updateFanCharacterPicker();
+}
+
+function renderFanCharacterPicker() {
+  const grid = $("#fanCharacterGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (const character of FAN_CHARACTERS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fan-character-option";
+    button.dataset.avatarId = character.id;
+    button.setAttribute("role", "radio");
+    button.innerHTML = `
+      <span class="fan-character-image">
+        <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" loading="eager" decoding="async" />
+      </span>
+      <strong>${escapeHtml(character.name)}</strong>
+      <span class="fan-character-check" aria-hidden="true"></span>
+    `;
+    button.querySelector("img")?.addEventListener("error", (event) => {
+      event.currentTarget.remove();
+      button.querySelector(".fan-character-image")?.classList.add("image-missing");
+    });
+    button.addEventListener("click", () => selectFanCharacter(character.id));
+    grid.appendChild(button);
+  }
+  updateFanCharacterPicker();
+}
+
+function buildJoinLobbyPayload(nickname) {
+  return { nickname, avatarId: state.fanCharacterId };
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomizeProfile() {
+  const nextCharacter = FAN_CHARACTERS[randomInt(0, FAN_CHARACTERS.length - 1)];
+  selectFanCharacter(nextCharacter.id);
+  const input = $("#nicknameInput");
+  if (input && !input.value.trim()) {
+    input.value = RANDOM_NICKNAMES[randomInt(0, RANDOM_NICKNAMES.length - 1)];
+  }
 }
 
 function modeLabel(mode) {
@@ -485,6 +623,7 @@ BGM_PLAYLISTS.all = [...BGM_PLAYLISTS.energetic, ...BGM_PLAYLISTS.calm];
 const BGM_MODES = new Set(["all", "energetic", "calm"]);
 const IMAGE_PRELOAD_URLS = [
   ...Object.values(CHARACTER_ASSETS),
+  ...FAN_CHARACTERS.map((character) => character.image),
   CARD_BACK_ASSET,
   BELL_IMAGE_URL,
 ];
@@ -1296,8 +1435,8 @@ function getMobileSeatPosition(index, count) {
     2: [{ left: 50, top: 23 }, { left: 50, top: 65 }],
     3: [{ left: 50, top: 22 }, { left: 29, top: 66 }, { left: 71, top: 66 }],
     4: [{ left: 29, top: 23 }, { left: 71, top: 23 }, { left: 29, top: 66 }, { left: 71, top: 66 }],
-    5: [{ left: 29, top: 20 }, { left: 71, top: 20 }, { left: 29, top: 58 }, { left: 71, top: 58 }, { left: 50, top: 69 }],
-    6: [{ left: 29, top: 19 }, { left: 71, top: 19 }, { left: 29, top: 55 }, { left: 71, top: 55 }, { left: 29, top: 69 }, { left: 71, top: 69 }],
+    5: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 19, top: 50 }, { left: 81, top: 50 }, { left: 50, top: 75 }],
+    6: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 19, top: 50 }, { left: 81, top: 50 }, { left: 29, top: 75 }, { left: 71, top: 75 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 66 };
 }
@@ -1979,9 +2118,10 @@ $("#nicknameForm").addEventListener("submit", (event) => {
     return;
   }
   state.nickname = nickname;
-  socket.emit("joinLobby", { nickname });
+  socket.emit("joinLobby", buildJoinLobbyPayload(nickname));
 });
 
+$("#randomProfileButton")?.addEventListener("click", randomizeProfile);
 $("#openCreateRoomButton").addEventListener("click", openCreateRoomModal);
 $("#guideToggleButton")?.addEventListener("click", toggleLobbyGuide);
 $("#tutorialButton")?.addEventListener("click", async () => {
@@ -2184,6 +2324,10 @@ socket.on("nicknameChangeResult", (payload) => {
 socket.on("lobbyState", (payload) => {
   state.lobby = payload;
   if (payload.currentUser?.nickname) state.nickname = payload.currentUser.nickname;
+  if (payload.currentUser?.avatarId) {
+    saveFanCharacterId(payload.currentUser.avatarId);
+    updateFanCharacterPicker();
+  }
   renderLobby();
   if (!state.room && !state.game) {
     showScreen("lobby");
@@ -2286,11 +2430,13 @@ socket.on("connect", () => {
   startLatencyMonitor();
   emitClientAssetsReady();
   if (state.nickname && state.activeScreen !== "nickname") {
-    socket.emit("joinLobby", { nickname: state.nickname });
+    socket.emit("joinLobby", buildJoinLobbyPayload(state.nickname));
   }
 });
 
 preloadAssets();
+saveFanCharacterId(getStoredFanCharacterId());
+renderFanCharacterPicker();
 applyBgmMode(getStoredBgmMode(), false);
 applyBgmVolume(getStoredBgmVolume());
 applySfxVolume(getStoredSfxVolume());

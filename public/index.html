@@ -50,9 +50,19 @@
             <div class="tiny-deco">✦ ♡ ✿</div>
             <h1>닉네임 입력</h1>
             <p id="nicknameError" class="error-text"></p>
-            <input id="nicknameInput" class="glow-input" type="text" maxlength="6" autocomplete="off" />
+            <label class="nickname-input-row">
+              <span>닉네임</span>
+              <input id="nicknameInput" class="glow-input" type="text" maxlength="6" autocomplete="off" placeholder="닉네임을 입력하세요" />
+            </label>
             <p class="input-help">6자내 한글,영어 포함</p>
-            <button class="primary-button" type="submit">대기실 입장</button>
+            <fieldset class="fan-character-field">
+              <legend>캐릭터 선택</legend>
+              <div id="fanCharacterGrid" class="fan-character-grid" role="radiogroup" aria-label="팬 캐릭터 선택"></div>
+            </fieldset>
+            <div class="entry-actions">
+              <button id="randomProfileButton" class="secondary-button" type="button">랜덤</button>
+              <button class="primary-button" type="submit">대기실 입장</button>
+            </div>
           </form>
         </section>
 
