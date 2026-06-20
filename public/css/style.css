@@ -1,4 +1,8 @@
-/* BabyBlue UI Theme v2 - Design1-10 Applied */
+/* BabyBlue legacy screen styles.
+   Redesign reset note:
+   - BabyBlue UI Theme v2, PC Game Room v3/v4, Final Polish, and Foundation v1/v1.1 blocks below are retained as legacy fallback.
+   - The canonical redesign tokens, common components, overflow rules, and screen roadmap now live in /css/design-system.css, loaded after this file.
+   - Future screen work should move rules out of this legacy file one screen at a time instead of adding new patch blocks here. */
 
 :root {
   --bb-navy: #061b5d;

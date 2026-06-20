@@ -14,7 +14,7 @@ const FAN_CHARACTERS = [
   { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
   { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
   { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
-  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/uri.png" },
   { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
