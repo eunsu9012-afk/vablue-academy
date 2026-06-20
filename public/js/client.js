@@ -292,6 +292,10 @@ function isMobileMode() {
   return window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
 }
 
+function updateAppHeight() {
+  document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
+}
+
 function getSelfPlayer(game = state.game) {
   return game?.players?.find((player) => player.id === game.selfPlayerId) || null;
 }
@@ -588,9 +592,11 @@ function renderUserBadge(player) {
   return "";
 }
 
-function renderName(player) {
+function renderName(player, options = {}) {
   const className = player?.isVaNickname ? "va-name" : "";
-  const avatarMarkup = renderPlayerAvatar(player, { size: "sm" });
+  const avatarMarkup = options.hideAiBadge && isAiPlayer(player)
+    ? ""
+    : renderPlayerAvatar(player, { size: options.size || "sm" });
   return `<span class="name-with-avatar">${avatarMarkup}${renderRankBadges(player)}<span class="${className}">${escapeHtml(displayName(player))}</span></span>`;
 }
 
@@ -1496,24 +1502,24 @@ function renderRoom(room) {
 function getSeatPosition(index, count) {
   if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
-    1: [{ left: 50, top: 81 }],
-    2: [{ left: 29, top: 50 }, { left: 71, top: 50 }],
-    3: [{ left: 31, top: 19 }, { left: 69, top: 19 }, { left: 50, top: 81 }],
-    4: [{ left: 25, top: 19 }, { left: 75, top: 19 }, { left: 25, top: 81 }, { left: 75, top: 81 }],
-    5: [{ left: 21, top: 19 }, { left: 50, top: 19 }, { left: 79, top: 19 }, { left: 35.5, top: 81 }, { left: 64.5, top: 81 }],
-    6: [{ left: 21, top: 19 }, { left: 50, top: 19 }, { left: 79, top: 19 }, { left: 21, top: 81 }, { left: 50, top: 81 }, { left: 79, top: 81 }],
+    1: [{ left: 50, top: 76 }],
+    2: [{ left: 28, top: 52 }, { left: 72, top: 52 }],
+    3: [{ left: 28, top: 23 }, { left: 72, top: 23 }, { left: 50, top: 77 }],
+    4: [{ left: 26, top: 23 }, { left: 74, top: 23 }, { left: 26, top: 77 }, { left: 74, top: 77 }],
+    5: [{ left: 24, top: 23 }, { left: 50, top: 23 }, { left: 76, top: 23 }, { left: 37, top: 77 }, { left: 63, top: 77 }],
+    6: [{ left: 24, top: 23 }, { left: 50, top: 23 }, { left: 76, top: 23 }, { left: 24, top: 77 }, { left: 50, top: 77 }, { left: 76, top: 77 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
 
 function getMobileSeatPosition(index, count) {
   const layouts = {
-    1: [{ left: 50, top: 66 }],
-    2: [{ left: 50, top: 23 }, { left: 50, top: 65 }],
-    3: [{ left: 50, top: 22 }, { left: 29, top: 66 }, { left: 71, top: 66 }],
-    4: [{ left: 29, top: 23 }, { left: 71, top: 23 }, { left: 29, top: 66 }, { left: 71, top: 66 }],
-    5: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 19, top: 50 }, { left: 81, top: 50 }, { left: 50, top: 75 }],
-    6: [{ left: 29, top: 18 }, { left: 71, top: 18 }, { left: 19, top: 50 }, { left: 81, top: 50 }, { left: 29, top: 75 }, { left: 71, top: 75 }],
+    1: [{ left: 50, top: 72 }],
+    2: [{ left: 28, top: 50 }, { left: 72, top: 50 }],
+    3: [{ left: 28, top: 24 }, { left: 72, top: 24 }, { left: 50, top: 74 }],
+    4: [{ left: 28, top: 24 }, { left: 72, top: 24 }, { left: 28, top: 74 }, { left: 72, top: 74 }],
+    5: [{ left: 27, top: 19 }, { left: 73, top: 19 }, { left: 27, top: 47 }, { left: 73, top: 47 }, { left: 50, top: 74 }],
+    6: [{ left: 27, top: 18 }, { left: 73, top: 18 }, { left: 27, top: 45 }, { left: 73, top: 45 }, { left: 27, top: 72 }, { left: 73, top: 72 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 66 };
 }
@@ -1717,10 +1723,9 @@ function renderGame(game) {
       : "";
     const statusBadges = [
       isSelf ? `<span class="player-badge self">나</span>` : "",
-      player.isAI ? `<span class="player-badge ai">AI</span>` : "",
       player.spectator ? `<span class="player-badge spectator">관전</span>` : "",
     ].filter(Boolean).join("");
-    zone.querySelector(".player-name").innerHTML = `${renderName(player)} ${renderHostBadge(player)} ${turnChip}`;
+    zone.querySelector(".player-name").innerHTML = `${renderName(player, { hideAiBadge: true })} ${renderHostBadge(player)} ${turnChip}`;
     zone.querySelector(".player-status-row").innerHTML = statusBadges;
     zone.querySelector(".score").textContent = player.score;
 
@@ -1801,15 +1806,15 @@ function renderGameUsers(players, selector = "#gameUserInfoList") {
   if (!list) return;
   list.innerHTML = players.map((player) => {
     const stats = player.stats || {};
-    const meta = state.game?.isTutorial
-      ? (player.isAI ? "느린 튜토리얼 AI" : "튜토리얼 참여중")
-      : player.isAI
-        ? `AI ${aiDifficultyLabel(player.aiDifficulty)}`
+    const meta = player.isAI
+      ? ""
+      : state.game?.isTutorial
+        ? "튜토리얼 참여중"
         : `${Number(stats.wins || 0)}승 ${Number(stats.losses || 0)}패 ${formatWinRate(stats.winRate)}`;
     if (selector !== "#gameUserInfoList") {
       return `
         <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
-          <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
+          <strong>${renderName(player, { hideAiBadge: true })} ${renderHostBadge(player)}</strong>
           <span>${escapeHtml(meta)}</span>
         </article>
       `;
@@ -1818,7 +1823,7 @@ function renderGameUsers(players, selector = "#gameUserInfoList") {
     return `
       <article class="game-user-info ${player.eliminated || player.spectator ? "is-eliminated" : ""}">
         <div class="game-user-main">
-          <strong>${renderName(player)} ${renderHostBadge(player)}</strong>
+          <strong>${renderName(player, { hideAiBadge: true })} ${renderHostBadge(player)}</strong>
           <span class="game-user-state-dot" aria-hidden="true"></span>
         </div>
         <span class="${metaClass}">${escapeHtml(meta)}</span>
@@ -2429,6 +2434,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", () => {
+  updateAppHeight();
   updateMobileMode();
   updateResponsiveSizes();
 });
@@ -2572,5 +2578,6 @@ applySfxVolume(getStoredSfxVolume());
 applyLobbyGuideCollapsed(isLobbyGuideCollapsed());
 setupBellImage();
 startLatencyMonitor();
+updateAppHeight();
 updateResponsiveSizes();
 showScreen("nickname");

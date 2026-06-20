@@ -182,12 +182,12 @@
           </div>
         </section>
 
-        <section id="gameScreen" class="screen hidden game-screen bb-screen screen-game" data-design-reference="게임화면 디자인.png">
-          <div class="game-layout">
-            <div id="gameBoard" class="game-board">
+        <section id="gameScreen" class="screen hidden game-screen bb-screen screen-game game-shell" data-design-reference="게임화면 디자인.png">
+          <div class="game-layout game-main">
+            <div id="gameBoard" class="game-board game-board-area">
               <div id="bellLog" class="bell-log hidden"></div>
-              <div id="gamePlayers" class="game-players"></div>
-              <button id="bellButton" class="bell-button" type="button" title="스페이스바로 종 치기">
+              <div id="gamePlayers" class="game-players player-layer"></div>
+              <button id="bellButton" class="bell-button bell-zone" type="button" title="스페이스바로 종 치기">
                 <img id="bellImage" src="/assets/bell/bell.png" alt="" aria-hidden="true" />
                 <span class="bell-fallback">종</span>
               </button>
@@ -218,7 +218,7 @@
               <div id="resultOverlay" class="result-overlay hidden screen-result" data-design-reference="게임종료화면 디자인.png"></div>
             </div>
             <button id="gameInfoToggleButton" class="game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
-            <aside id="gameInfoPanel" class="game-info-panel bb-panel" aria-label="게임 정보">
+            <aside id="gameInfoPanel" class="game-info-panel game-side-panel bb-panel" aria-label="게임 정보">
               <section class="game-info-card bb-card">
                 <h2>최근 정답 반응속도</h2>
                 <ol id="reactionSpeedList" class="reaction-speed-list"></ol>

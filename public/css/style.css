@@ -5,18 +5,18 @@
    into the lowest cascade layer. New work should land in the focused files
    below instead of adding another high-specificity patch block. */
 
-@layer legacy, reset, tokens, layout, components, screens, responsive, compatibility;
+@layer legacy, reset, tokens, layout, components, responsive, compatibility, screens;
 
 @import url("./legacy-compat.css") layer(legacy);
 @import url("./reset.css") layer(reset);
 @import url("./tokens.css") layer(tokens);
 @import url("./layout.css") layer(layout);
 @import url("./components.css") layer(components);
+@import url("./responsive.css") layer(responsive);
+@import url("./compatibility.css") layer(compatibility);
 @import url("./screens/nickname.css") layer(screens);
 @import url("./screens/lobby.css") layer(screens);
 @import url("./screens/tutorial.css") layer(screens);
 @import url("./screens/room.css") layer(screens);
 @import url("./screens/game.css") layer(screens);
 @import url("./screens/result.css") layer(screens);
-@import url("./responsive.css") layer(responsive);
-@import url("./compatibility.css") layer(compatibility);
