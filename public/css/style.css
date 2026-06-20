@@ -4670,7 +4670,7 @@ select:focus,
   }
 }
 
-/* BabyBlue PC Game Room v2 - Design5 Applied */
+/* BabyBlue PC Game Room v3 - Design5 Final Polish */
 @media (min-width: 1280px) {
   body.is-game-screen:not(.is-mobile) {
     overflow: hidden;
