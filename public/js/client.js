@@ -1420,12 +1420,12 @@ function renderRoom(room) {
 function getSeatPosition(index, count) {
   if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
-    1: [{ left: 50, top: 79 }],
-    2: [{ left: 24, top: 50 }, { left: 76, top: 50 }],
-    3: [{ left: 30, top: 23 }, { left: 70, top: 23 }, { left: 50, top: 79 }],
-    4: [{ left: 24, top: 23 }, { left: 76, top: 23 }, { left: 24, top: 79 }, { left: 76, top: 79 }],
-    5: [{ left: 18, top: 23 }, { left: 50, top: 23 }, { left: 82, top: 23 }, { left: 34, top: 79 }, { left: 66, top: 79 }],
-    6: [{ left: 18, top: 23 }, { left: 50, top: 23 }, { left: 82, top: 23 }, { left: 18, top: 79 }, { left: 50, top: 79 }, { left: 82, top: 79 }],
+    1: [{ left: 50, top: 81 }],
+    2: [{ left: 28, top: 50 }, { left: 72, top: 50 }],
+    3: [{ left: 34, top: 19 }, { left: 66, top: 19 }, { left: 50, top: 81 }],
+    4: [{ left: 28, top: 19 }, { left: 72, top: 19 }, { left: 28, top: 81 }, { left: 72, top: 81 }],
+    5: [{ left: 23, top: 19 }, { left: 50, top: 19 }, { left: 77, top: 19 }, { left: 37, top: 81 }, { left: 63, top: 81 }],
+    6: [{ left: 22, top: 19 }, { left: 50, top: 19 }, { left: 78, top: 19 }, { left: 22, top: 81 }, { left: 50, top: 81 }, { left: 78, top: 81 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }

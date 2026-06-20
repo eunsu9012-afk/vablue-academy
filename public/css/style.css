@@ -4808,13 +4808,13 @@ select:focus,
   }
 
   body.is-game-screen:not(.is-mobile) .game-screen {
-    --open-card-width: clamp(104px, 6vw, 132px);
+    --open-card-width: clamp(112px, 8.5vw, 136px);
     --open-card-height: calc(var(--open-card-width) * 1.333);
-    --deck-card-width: clamp(86px, 5.2vw, 116px);
+    --deck-card-width: clamp(90px, 6.6vw, 114px);
     --deck-card-height: calc(var(--deck-card-width) * 1.333);
-    --deck-offset: calc(var(--deck-card-width) + 13px);
-    --seat-width: clamp(238px, 16vw, 304px);
-    --bell-size: clamp(112px, 7.6vw, 158px);
+    --deck-offset: calc(var(--deck-card-width) + 14px);
+    --seat-width: clamp(250px, 19vw, 312px);
+    --bell-size: clamp(146px, 10.5vw, 178px);
     padding: 126px 18px 18px;
   }
 
@@ -4836,8 +4836,9 @@ select:focus,
     border: 2px solid rgba(172, 205, 255, 0.96);
     border-radius: 30px;
     background:
-      radial-gradient(circle at 50% 50%, rgba(46, 115, 255, 0.13) 0 17%, transparent 18%),
-      radial-gradient(circle at 50% 50%, rgba(46, 115, 255, 0.08) 0 38%, transparent 39%),
+      radial-gradient(circle at 50% 50%, rgba(46, 115, 255, 0.16) 0 14%, transparent 15%),
+      radial-gradient(circle at 50% 50%, rgba(46, 115, 255, 0.095) 0 31%, transparent 32%),
+      radial-gradient(circle at 50% 50%, rgba(46, 115, 255, 0.06) 0 47%, transparent 48%),
       radial-gradient(circle at 13% 18%, rgba(255, 255, 255, 0.95), transparent 24%),
       linear-gradient(180deg, rgba(248, 252, 255, 0.98), rgba(232, 244, 255, 0.96));
     box-shadow:
@@ -4848,26 +4849,26 @@ select:focus,
   body.is-game-screen:not(.is-mobile) .game-board::before {
     content: "";
     position: absolute;
-    inset: 9% 14%;
+    inset: 7% 10%;
     z-index: 0;
-    border: 26px solid rgba(46, 115, 255, 0.045);
+    border: 32px solid rgba(46, 115, 255, 0.055);
     border-radius: 50%;
     background:
-      radial-gradient(circle, rgba(255, 255, 255, 0.55), transparent 60%),
-      repeating-radial-gradient(circle, rgba(46, 115, 255, 0.05) 0 2px, transparent 2px 18px);
+      radial-gradient(circle, rgba(255, 255, 255, 0.58), transparent 52%),
+      repeating-radial-gradient(circle, rgba(46, 115, 255, 0.07) 0 2px, transparent 2px 16px);
     pointer-events: none;
   }
 
   body.is-game-screen:not(.is-mobile) .game-board::after {
-    content: "✦     ✧        ✦        ✧     ✦";
+    content: "✦     ✧        BLUE ACADEMY        ✧     ✦";
     position: absolute;
     inset: 26px;
     z-index: 0;
     border: 1px solid rgba(172, 205, 255, 0.55);
     border-radius: 24px;
     color: rgba(46, 115, 255, 0.12);
-    font-size: 36px;
-    letter-spacing: 18px;
+    font-size: clamp(22px, 2.2vw, 38px);
+    letter-spacing: 12px;
     line-height: 1.3;
     pointer-events: none;
   }
@@ -4879,12 +4880,12 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .player-zone {
     width: var(--seat-width);
-    padding: 9px;
+    padding: 10px;
     border: 2px solid rgba(207, 224, 255, 0.98);
     border-radius: 20px;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 252, 255, 0.96));
-    box-shadow: 0 16px 28px rgba(13, 53, 145, 0.12);
+    box-shadow: 0 18px 32px rgba(13, 53, 145, 0.13);
     backdrop-filter: blur(8px);
     transition:
       border-color 0.18s ease,
@@ -4895,7 +4896,7 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .player-card-shell {
     display: grid;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
   }
 
@@ -5021,11 +5022,12 @@ select:focus,
   }
 
   body.is-game-screen:not(.is-mobile) .player-card-body {
-    padding: 7px;
+    padding: 8px;
     border: 1px solid rgba(207, 224, 255, 0.72);
     border-radius: 17px;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(242, 248, 255, 0.68));
+      radial-gradient(circle at 78% 18%, rgba(255, 201, 77, 0.12), transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(242, 248, 255, 0.76));
   }
 
   body.is-game-screen:not(.is-mobile) .card-stack {
@@ -5042,8 +5044,8 @@ select:focus,
   body.is-game-screen:not(.is-mobile) .front-card,
   body.is-game-screen:not(.is-mobile) .empty-card-space {
     border: 2px solid rgba(255, 255, 255, 0.98);
-    border-radius: 15px;
-    box-shadow: 0 12px 20px rgba(13, 53, 145, 0.14);
+    border-radius: 16px;
+    box-shadow: 0 14px 24px rgba(13, 53, 145, 0.16);
   }
 
   body.is-game-screen:not(.is-mobile) .deck-card {
@@ -5057,6 +5059,16 @@ select:focus,
     background-color: #fff;
   }
 
+  body.is-game-screen:not(.is-mobile) .front-card .character-piece img {
+    transform: scale(1.12);
+    transform-origin: center;
+  }
+
+  body.is-game-screen:not(.is-mobile) .front-card::before,
+  body.is-game-screen:not(.is-mobile) .front-card::after {
+    opacity: 0.55;
+  }
+
   body.is-game-screen:not(.is-mobile) .deck-card.clickable {
     outline: 3px solid rgba(255, 201, 77, 0.82);
     box-shadow:
@@ -5068,9 +5080,9 @@ select:focus,
     border-color: #5da6ff;
     outline: 0;
     box-shadow:
-      0 0 0 4px rgba(46, 115, 255, 0.15),
-      0 0 0 8px rgba(46, 115, 255, 0.06),
-      0 18px 34px rgba(46, 115, 255, 0.2);
+      0 0 0 3px rgba(46, 115, 255, 0.18),
+      0 0 0 7px rgba(46, 115, 255, 0.06),
+      0 20px 36px rgba(46, 115, 255, 0.19);
   }
 
   body.is-game-screen:not(.is-mobile) .player-zone.current-turn::after {
@@ -5123,8 +5135,35 @@ select:focus,
     border-radius: 50%;
     background:
       radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.12) 58%, transparent 70%);
-    filter: drop-shadow(0 22px 18px rgba(7, 26, 91, 0.24));
+    filter: drop-shadow(0 26px 20px rgba(7, 26, 91, 0.30));
+    isolation: isolate;
     box-shadow: none;
+  }
+
+  body.is-game-screen:not(.is-mobile) .bell-button::before,
+  body.is-game-screen:not(.is-mobile) .bell-button::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  body.is-game-screen:not(.is-mobile) .bell-button::before {
+    inset: -34px;
+    z-index: -2;
+    background:
+      radial-gradient(circle, rgba(255, 255, 255, 0.95) 0 30%, rgba(92, 158, 255, 0.22) 31% 48%, rgba(92, 158, 255, 0.06) 49% 67%, transparent 68%),
+      radial-gradient(circle, rgba(255, 201, 77, 0.18), transparent 58%);
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 255, 255, 0.58),
+      0 0 42px rgba(46, 115, 255, 0.18);
+  }
+
+  body.is-game-screen:not(.is-mobile) .bell-button::after {
+    inset: -12px;
+    z-index: -1;
+    border: 2px solid rgba(94, 153, 255, 0.22);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.34), transparent 64%);
   }
 
   body.is-game-screen:not(.is-mobile) .bell-button img {
@@ -5135,14 +5174,14 @@ select:focus,
   }
 
   body.is-game-screen:not(.is-mobile) .bell-button:hover {
-    transform: translate(-50%, -53%) scale(1.03);
+    transform: translate(-50%, -54%) scale(1.055);
     filter:
-      drop-shadow(0 25px 22px rgba(7, 26, 91, 0.28))
-      drop-shadow(0 0 18px rgba(46, 115, 255, 0.2));
+      drop-shadow(0 30px 24px rgba(7, 26, 91, 0.32))
+      drop-shadow(0 0 24px rgba(46, 115, 255, 0.26));
   }
 
   body.is-game-screen:not(.is-mobile) .bell-button:active {
-    transform: translate(-50%, -50%) scale(0.96);
+    transform: translate(-50%, -50%) scale(0.93);
   }
 
   body.is-game-screen:not(.is-mobile) .bell-log {
@@ -5160,9 +5199,9 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .game-info-panel {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: 118px minmax(0, 1fr) 104px;
     align-self: stretch;
-    gap: 16px;
+    gap: 14px;
     min-width: 0;
     height: 100%;
     padding: 0;
@@ -5174,7 +5213,7 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .game-info-card {
     min-height: 0;
-    padding: 18px;
+    padding: 16px;
     border: 2px solid rgba(207, 224, 255, 0.96);
     border-radius: 24px;
     background:
@@ -5186,7 +5225,7 @@ select:focus,
     display: flex;
     align-items: center;
     gap: 9px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     color: #082981;
     font-size: 18px;
     font-weight: 1000;
@@ -5208,7 +5247,7 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .reaction-speed-list {
     display: grid;
-    gap: 10px;
+    gap: 8px;
   }
 
   body.is-game-screen:not(.is-mobile) .reaction-speed-list li:not(.empty-info) {
@@ -5216,8 +5255,8 @@ select:focus,
     grid-template-columns: 46px minmax(0, 1fr) auto;
     align-items: center;
     gap: 9px;
-    min-height: 44px;
-    padding: 9px 10px;
+    min-height: 40px;
+    padding: 8px 10px;
     border: 1px solid rgba(207, 224, 255, 0.9);
     border-radius: 16px;
     background: #fff;
@@ -5225,7 +5264,7 @@ select:focus,
   }
 
   body.is-game-screen:not(.is-mobile) .reaction-speed-list li.is-best {
-    min-height: 64px;
+    min-height: 54px;
     border-color: rgba(255, 201, 77, 0.72);
     background:
       radial-gradient(circle at 12% 42%, rgba(255, 201, 77, 0.2), transparent 28%),
@@ -5271,9 +5310,9 @@ select:focus,
 
   body.is-game-screen:not(.is-mobile) .game-user-info {
     display: grid;
-    gap: 5px;
-    min-height: 48px;
-    padding: 10px 12px;
+    gap: 4px;
+    min-height: 44px;
+    padding: 8px 10px;
     border: 1px solid rgba(207, 224, 255, 0.9);
     border-radius: 16px;
     background: #fff;
@@ -5319,12 +5358,114 @@ select:focus,
   body.is-game-screen:not(.is-mobile) .latency-value {
     display: grid;
     place-items: center;
-    min-height: 118px;
+    min-height: 76px;
     border: 1px solid rgba(38, 179, 111, 0.22);
     border-radius: 18px;
     background: linear-gradient(180deg, #ffffff, #effbf6);
     color: #13a85e;
-    font-size: 34px;
+    font-size: 30px;
     font-weight: 1000;
+  }
+
+  @media (max-height: 760px) {
+    body.is-game-screen:not(.is-mobile) .game-screen {
+      --open-card-width: 100px;
+      --open-card-height: 133px;
+      --deck-card-width: 82px;
+      --deck-card-height: 109px;
+      --deck-offset: 96px;
+      --seat-width: 228px;
+      --bell-size: 136px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-zone {
+      padding: 8px;
+      border-radius: 18px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-card-shell {
+      gap: 8px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-head {
+      min-height: 30px;
+      gap: 8px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-name {
+      font-size: 15px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .host-inline,
+    body.is-game-screen:not(.is-mobile) .player-badge,
+    body.is-game-screen:not(.is-mobile) .current-turn-chip {
+      min-height: 20px;
+      padding: 2px 7px;
+      font-size: 10px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-status-row {
+      min-height: 20px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .score-wrap {
+      min-height: 30px;
+      padding: 3px 8px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .score {
+      font-size: 17px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .player-card-body {
+      padding: 6px;
+      border-radius: 15px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .bell-button::before {
+      inset: -28px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-info-panel {
+      grid-template-rows: 104px minmax(0, 1fr) 88px;
+      gap: 12px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-info-card {
+      padding: 13px;
+      border-radius: 20px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-info-card h2 {
+      margin-bottom: 9px;
+      font-size: 16px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .reaction-speed-list li:not(.empty-info) {
+      min-height: 36px;
+      padding: 6px 9px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .reaction-speed-list li.is-best {
+      min-height: 42px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-user-info {
+      min-height: 40px;
+      padding: 7px 9px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-user-info strong {
+      font-size: 14px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .game-user-meta {
+      font-size: 11px;
+    }
+
+    body.is-game-screen:not(.is-mobile) .latency-value {
+      min-height: 54px;
+      font-size: 25px;
+    }
   }
 }
