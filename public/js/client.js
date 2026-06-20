@@ -1430,7 +1430,6 @@ function renderRoom(room) {
         ${player.isHost ? `<span class="badge host">방장</span>` : ""}
         ${player.isAI ? `<span class="badge ai">[AI]</span>` : ""}
         ${player.isAI ? `<span class="badge ai-difficulty-badge">AI ${aiDifficultyLabel(room.aiDifficulty)}</span>` : ""}
-        ${player.isAI ? "" : `<span class="badge ${player.assetsReady ? "ready" : "not-ready"}">${player.assetsReady ? "[이미지 준비]" : "[이미지 로딩]"}</span>`}
         ${player.isAI || player.isHost ? "" : `<span class="badge ${player.ready ? "ready" : "not-ready"}">${player.ready ? "[준비]" : "[미준비]"}</span>`}
       </div>
     `;
@@ -1459,7 +1458,7 @@ function renderRoom(room) {
   $("#startGameButton").disabled = !isHost || !room.canStart || !state.assetsReady || isCountdown;
   $("#roomHint").textContent = isCountdown
     ? "게임 시작 중입니다."
-    : (room.canStartReason || (state.assetsReady ? "게임 시작 조건: 총 2명 이상" : "이미지 로딩이 끝나면 게임을 시작할 수 있습니다"));
+    : (room.canStartReason || (state.assetsReady ? "게임 시작 조건: 총 2명 이상" : "게임 자료 확인 후 시작할 수 있습니다"));
 }
 
 function getSeatPosition(index, count) {
