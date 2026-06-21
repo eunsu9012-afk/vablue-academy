@@ -325,6 +325,7 @@ function showScreen(name) {
   document.body.classList.toggle("is-nickname-screen", name === "nickname");
   document.body.classList.toggle("is-tutorial-screen", name === "tutorial");
   document.body.classList.toggle("is-game-screen", name === "game");
+  if (name !== "game") document.body.classList.remove("is-result-overlay-open");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
   if (name !== "room" && name !== "game") cancelPreGameCountdown();
@@ -1987,6 +1988,7 @@ function updateRoomSummary(room) {
 }
 
 function renderRoom(room) {
+  document.body.classList.remove("is-result-overlay-open");
   if (!room) {
     state.room = null;
     state.game = null;
@@ -2652,11 +2654,14 @@ function startTurnTimer(game) {
 
 function updateGameOverlay(game) {
   const overlay = $("#resultOverlay");
+  document.body.classList.remove("is-result-overlay-open");
   overlay.className = "result-overlay screen-result hidden";
   overlay.innerHTML = "";
 
   if (state.gameResult) {
-    overlay.className = "result-overlay screen-result result-card";
+    const isFinishedResult = !state.gameResult.isTutorial;
+    document.body.classList.toggle("is-result-overlay-open", isFinishedResult);
+    overlay.className = `result-overlay screen-result result-card ${isFinishedResult ? "result-finished-overlay" : ""}`;
     overlay.innerHTML = renderGameResult(state.gameResult);
     overlay.querySelector(".overlay-leave-button")?.addEventListener("click", () => socket.emit("leaveRoom"));
     overlay.querySelector(".overlay-watch-button")?.addEventListener("click", () => {
@@ -2694,6 +2699,154 @@ function updateGameOverlay(game) {
   }
 }
 
+function resultPlayerName(player) {
+  const name = displayName(player) || "참가자";
+  if (!isAiPlayer(player)) return name;
+  return /^AI\s+/i.test(name) ? name : `AI ${name}`;
+}
+
+function resultAiDifficultyLabel(player, result = state.gameResult) {
+  if (!isAiPlayer(player)) return "";
+  const raw = player?.aiDifficultyLabel || player?.aiDifficulty || result?.aiDifficulty || state.game?.aiDifficulty || "";
+  if (!raw) return "";
+  return AI_DIFFICULTY_LABELS[raw] || raw;
+}
+
+function resultScore(player) {
+  const score = Number(player?.score);
+  return Number.isFinite(score) ? score : 0;
+}
+
+function resultScoreChange(player) {
+  const fields = ["scoreDelta", "scoreChange", "delta", "scoreDiff"];
+  for (const field of fields) {
+    if (player?.[field] === null || player?.[field] === undefined || player?.[field] === "") continue;
+    const value = Number(player[field]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function resultStatusLabel(player, result) {
+  if (player?.id && result?.winner?.id === player.id) return "승리";
+  if (player?.eliminated || player?.spectator) return "탈락";
+  return "생존";
+}
+
+function resultRankClass(rank) {
+  if (rank === 1) return "rank-gold";
+  if (rank === 2) return "rank-silver";
+  if (rank === 3) return "rank-bronze";
+  return "";
+}
+
+function resultRankIcon(rank) {
+  if (rank === 1) return "🏆";
+  if (rank === 2) return "2";
+  if (rank === 3) return "3";
+  return String(rank);
+}
+
+function getResultPlayers(result) {
+  const players = Array.isArray(result?.players) ? [...result.players] : [];
+  const winnerId = result?.winner?.id || "";
+  return players.sort((a, b) => {
+    if (a?.id === winnerId && b?.id !== winnerId) return -1;
+    if (b?.id === winnerId && a?.id !== winnerId) return 1;
+    return resultScore(b) - resultScore(a);
+  });
+}
+
+function getResultWinner(result, players = getResultPlayers(result)) {
+  const winnerId = result?.winner?.id || "";
+  const listedWinner = players.find((player) => player.id === winnerId);
+  if (listedWinner) return listedWinner;
+  return result?.winner || players[0] || null;
+}
+
+function renderResultAvatar(player, size = "md") {
+  if (!player || isAiPlayer(player)) return "";
+  return `<span class="result-player-avatar">${renderFanAvatar(player, size)}</span>`;
+}
+
+function renderResultPlayerName(player, result, options = {}) {
+  const name = resultPlayerName(player);
+  const aiDifficulty = resultAiDifficultyLabel(player, result);
+  const selfBadge = player?.id && result?.selfPlayerId === player.id
+    ? `<span class="result-meta-badge result-self-badge">나</span>`
+    : "";
+  const hostBadge = player?.isHost && !isAiPlayer(player)
+    ? `<span class="result-meta-badge">방장</span>`
+    : "";
+  const aiMeta = aiDifficulty
+    ? `<span class="result-meta-badge result-ai-difficulty">${escapeHtml(aiDifficulty)}</span>`
+    : "";
+  const rankBadges = !isAiPlayer(player) ? renderRankBadges(player) : "";
+  const meta = [aiMeta, selfBadge, hostBadge].filter(Boolean).join("");
+  return `
+    <div class="result-player-name-block ${options.large ? "is-large" : ""}">
+      <span class="result-player-name">${rankBadges}${escapeHtml(name)}</span>
+      ${meta ? `<span class="result-player-meta">${meta}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderResultScoreDelta(player) {
+  const delta = resultScoreChange(player);
+  if (delta === null) return "";
+  const className = delta > 0 ? "is-positive" : delta < 0 ? "is-negative" : "is-neutral";
+  const text = delta > 0 ? `+${delta}` : String(delta);
+  return `<span class="result-score-delta ${className}">${escapeHtml(text)}</span>`;
+}
+
+function renderResultWinnerCard(winner, result) {
+  if (!winner) {
+    return `
+      <section class="result-winner-card is-empty">
+        <span class="winner-rank">결과</span>
+        <strong class="winner-name">결과 데이터 없음</strong>
+        <p class="winner-message">표시할 승자 정보가 없습니다.</p>
+      </section>
+    `;
+  }
+
+  const isAI = isAiPlayer(winner);
+  const avatar = isAI
+    ? `<span class="winner-symbol-avatar" aria-hidden="true">🏆</span>`
+    : renderResultAvatar(winner, "lg");
+  return `
+    <section class="result-winner-card ${isAI ? "is-ai-winner" : ""}">
+      <div class="winner-rank"><span aria-hidden="true">🏆</span> 1위</div>
+      <div class="winner-profile">
+        ${avatar}
+        ${renderResultPlayerName(winner, result, { large: true })}
+      </div>
+      <div class="winner-score">최종 점수 <strong>${resultScore(winner).toLocaleString()}점</strong></div>
+      <p class="winner-message">마지막까지 살아남았습니다.</p>
+    </section>
+  `;
+}
+
+function renderResultRankRow(player, index, result) {
+  const rank = index + 1;
+  const status = resultStatusLabel(player, result);
+  const deltaMarkup = renderResultScoreDelta(player);
+  return `
+    <article class="result-rank-row ${resultRankClass(rank)} ${player?.id === result?.selfPlayerId ? "is-self" : ""}">
+      <div class="result-rank-medal ${resultRankClass(rank)}">${escapeHtml(resultRankIcon(rank))}</div>
+      <div class="result-rank-player">
+        ${renderResultAvatar(player, "md")}
+        ${renderResultPlayerName(player, result)}
+      </div>
+      <div class="result-rank-metrics">
+        ${deltaMarkup}
+        <strong class="result-final-score">${resultScore(player).toLocaleString()}점</strong>
+        <span class="result-status-pill ${status === "승리" ? "is-win" : status === "탈락" ? "is-out" : ""}">${escapeHtml(status)}</span>
+      </div>
+    </article>
+  `;
+}
+
 function renderGameResult(result) {
   if (result.isTutorial) {
     return `
@@ -2707,33 +2860,48 @@ function renderGameResult(result) {
     `;
   }
 
-  const isWinner = result.winner?.id === result.selfPlayerId;
-  const title = isWinner ? "승리" : "패배";
-  const hint = isWinner
-    ? "5초 후 자동 이동하거나 지금 대기실로 이동할 수 있습니다"
-    : "관전모드로 보거나 바로 나갈 수 있습니다";
-  const rows = result.players
-    .map((player) => `
-      <div>
-        <strong>${renderName(player)}</strong>
-        <span>${player.isAI ? "[AI]" : ""}</span>
-        <span>${player.score}점</span>
-        <span>${player.eliminated || player.spectator ? "탈락" : "생존"}</span>
-      </div>
-    `)
-    .join("");
+  const players = getResultPlayers(result);
+  const winner = getResultWinner(result, players);
+  const isWinner = winner?.id && winner.id === result.selfPlayerId;
+  const eliminatedCount = players.filter((player) => player.eliminated || player.spectator).length;
+  const rows = players.length
+    ? players.map((player, index) => renderResultRankRow(player, index, result)).join("")
+    : `<p class="result-empty-text">결과 데이터 없음</p>`;
 
   return `
-    <div class="result-box">
-      <h2>${title}</h2>
-      <p class="hint-text">${hint}</p>
-      <p class="hint-text">승자: ${renderName(result.winner)}</p>
-      ${result.statsExcluded ? `<p class="hint-text">AI 포함 게임은 전적에 반영되지 않습니다</p>` : ""}
+    <div class="result-box result-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+      <header class="result-header">
+        <span class="result-label">Game Result</span>
+        <h2 id="resultTitle" class="result-title">🏆 게임 결과</h2>
+        <p class="result-subtitle">모든 플레이어의 최종 점수와 순위가 결정되었습니다.</p>
+      </header>
+      ${renderResultWinnerCard(winner, result)}
+      <section class="result-summary-grid" aria-label="결과 요약">
+        <div class="result-summary-card">
+          <span>참가자</span>
+          <strong>${players.length}명</strong>
+        </div>
+        <div class="result-summary-card">
+          <span>탈락</span>
+          <strong>${eliminatedCount}명</strong>
+        </div>
+        <div class="result-summary-card">
+          <span>전적</span>
+          <strong>${result.statsExcluded ? "제외" : "반영"}</strong>
+        </div>
+      </section>
+      ${result.statsExcluded ? `<p class="result-notice">AI 포함 게임은 전적에 반영되지 않습니다.</p>` : ""}
+      <section class="result-rank-section" aria-label="최종 순위">
+        <div class="result-rank-header">
+          <h3>최종 순위</h3>
+          <span>점수 변화 데이터가 없는 항목은 최종 점수만 표시됩니다.</span>
+        </div>
+        <div class="result-rank-list">${rows}</div>
+      </section>
       <div class="result-actions">
         ${isWinner ? "" : `<button class="secondary-button overlay-watch-button" type="button">관전모드</button>`}
-        <button class="primary-button overlay-leave-button" type="button">${isWinner ? "대기실 이동" : "나가기"}</button>
+        <button class="primary-button overlay-leave-button" type="button">${isWinner ? "로비로" : "나가기"}</button>
       </div>
-      <div class="result-score-list">${rows}</div>
     </div>
   `;
 }
