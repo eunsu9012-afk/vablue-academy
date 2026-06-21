@@ -34,7 +34,7 @@
 
 .lobby-header-panel {
   display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(620px, 1.6fr);
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.35fr);
   align-items: stretch;
   gap: clamp(14px, 1.6vw, 20px);
   border-radius: 28px;
@@ -86,13 +86,13 @@
 }
 
 .lobby-title-copy h1 {
-  margin: 4px 0 6px;
-  overflow: hidden;
+  margin: 0;
+  overflow: visible;
   color: var(--bb-blue-950);
-  font-size: clamp(28px, 3vw, 42px);
+  font-size: clamp(26px, 2.5vw, 36px);
   font-weight: 950;
   line-height: 1.12;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -222,7 +222,7 @@
 
 .lobby-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(310px, 360px);
+  grid-template-columns: minmax(500px, 0.95fr) minmax(590px, 1.05fr);
   gap: clamp(14px, 1.6vw, 18px);
   min-width: 0;
   align-items: start;
@@ -552,8 +552,23 @@
 
 .lobby-side-panel {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
+  align-items: start;
+}
+
+#onlineUsersPanel {
+  order: 1;
+}
+
+#lobbyRankingPanel {
+  order: 2;
+}
+
+.guide-panel {
+  order: 3;
+  grid-column: 1 / -1;
 }
 
 .lobby-info-card {
@@ -647,7 +662,7 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  max-height: clamp(180px, calc(100dvh - 560px), 310px);
+  max-height: clamp(220px, calc(100dvh - 440px), 360px);
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;

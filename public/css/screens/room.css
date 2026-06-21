@@ -357,13 +357,19 @@
 }
 
 .room-side-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 3px;
+  scrollbar-width: thin;
 }
 
 .room-side-panel > :where(.bb-card, details) {
   display: grid;
+  flex: 0 0 auto;
   gap: 12px;
   align-content: start;
   overflow: hidden;
@@ -528,8 +534,15 @@
   }
 
   .room-side-panel {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    overflow: hidden;
+    max-height: 100%;
+  }
+
+  .room-actions-card {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.97) !important;
+    backdrop-filter: blur(10px);
   }
 }
 

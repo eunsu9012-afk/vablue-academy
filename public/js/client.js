@@ -1864,6 +1864,7 @@ function renderRoomPlayerSlot(player, index, room) {
   const isAI = isAiPlayer(player);
   const nameClass = player?.isVaNickname ? "va-name" : "";
   const badges = renderRoomPlayerBadges(player, room);
+  const subtitle = isAI ? aiDifficultyLabel(room?.aiDifficulty) : "플레이어";
   const avatarMarkup = isAI
     ? `<span class="room-ai-mark" aria-hidden="true"></span>`
     : renderRoomFanAvatar(player);
@@ -1875,7 +1876,7 @@ function renderRoomPlayerSlot(player, index, room) {
       <div class="room-slot-avatar">${avatarMarkup}</div>
       <div class="room-slot-copy">
         <strong class="room-slot-name ${nameClass}">${escapeHtml(roomDisplayName(player))}</strong>
-        <span class="room-slot-subtitle">${isAI ? "자동 참가자" : "플레이어"}</span>
+        <span class="room-slot-subtitle">${escapeHtml(subtitle)}</span>
       </div>
       ${badges ? `<div class="room-slot-badges">${badges}</div>` : ""}
     </article>
