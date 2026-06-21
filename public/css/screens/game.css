@@ -818,6 +818,58 @@ body.is-game-screen #bellButton .bell-fallback {
   display: none;
 }
 
+body.is-game-screen #gameCountdownOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.42), rgba(219, 236, 255, 0.18) 34%, transparent 62%);
+}
+
+body.is-game-screen #gameCountdownOverlay.hidden {
+  display: none;
+}
+
+body.is-game-screen #gameCountdownOverlay .game-countdown-number {
+  display: grid;
+  width: clamp(118px, 13vw, 172px);
+  height: clamp(118px, 13vw, 172px);
+  place-items: center;
+  border: 1px solid rgba(111, 159, 255, 0.42);
+  border-radius: var(--bb-radius-circle);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 0 0 10px rgba(255, 255, 255, 0.34),
+    0 0 38px rgba(54, 118, 255, 0.3),
+    0 18px 42px rgba(6, 21, 83, 0.22);
+  color: var(--bb-blue-950);
+  font-size: clamp(96px, 10vw, 140px);
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 4px 0 rgba(255, 255, 255, 0.74), 0 0 26px rgba(255, 255, 255, 0.72);
+}
+
+body.is-game-screen #gameCountdownOverlay.is-pulse .game-countdown-number {
+  animation: game-countdown-pop 720ms cubic-bezier(0.18, 0.86, 0.26, 1) both;
+}
+
+@keyframes game-countdown-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.92;
+    transform: scale(0.96);
+  }
+}
+
 body.is-game-screen #gameScreen .bell-log {
   position: absolute;
   left: 50%;
@@ -1356,6 +1408,7 @@ body.is-game-screen #mobileBoardStats {
   body.is-game-screen #gameScreen .player-card-shell {
     gap: 4px;
     border-radius: 12px;
+    overflow: visible;
     padding: 4px;
   }
 
@@ -1408,11 +1461,12 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen #gameScreen .player-card-body {
     border-radius: 10px;
+    overflow: visible;
     padding: 4px;
   }
 
   body.is-game-screen #gameScreen .card-stack {
-    max-width: calc(100% + 8px);
+    max-width: 100%;
   }
 
   body.is-game-screen #gameScreen .deck-card,
@@ -1439,9 +1493,20 @@ body.is-game-screen #mobileBoardStats {
     width: var(--bell-size, 94px);
     height: var(--bell-size, 94px);
     box-shadow:
-      0 0 0 5px rgba(255, 255, 255, 0.72),
-      0 0 0 12px rgba(111, 159, 255, 0.13),
+      0 0 0 4px rgba(255, 255, 255, 0.68),
+      0 0 0 10px rgba(111, 159, 255, 0.1),
       0 12px 22px rgba(6, 21, 83, 0.24);
+  }
+
+  body.is-game-screen #bellButton::before {
+    inset: -6%;
+    opacity: 0.48;
+  }
+
+  body.is-game-screen #gameCountdownOverlay .game-countdown-number {
+    width: clamp(92px, 24vw, 118px);
+    height: clamp(92px, 24vw, 118px);
+    font-size: clamp(72px, 20vw, 100px);
   }
 
   body.is-game-screen #gameScreen .bell-log {

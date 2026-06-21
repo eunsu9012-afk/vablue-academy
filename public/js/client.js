@@ -139,6 +139,9 @@ let flipAvailabilityTimer = null;
 let tutorialAdvanceTimer = null;
 let startCountdownTimer = null;
 let lastStartCountdownNumber = null;
+let gameEntryCountdownTimer = null;
+let gameEntryCountdownKey = null;
+let gameEntryCountdownToken = 0;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
@@ -324,6 +327,7 @@ function showScreen(name) {
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
   if (name !== "game") {
+    clearGameEntryCountdown();
     document.body.classList.remove("is-tutorial-game");
     stopTurnTimer();
     clearFlipAvailabilityTimer();
@@ -1048,6 +1052,71 @@ function playBellAnimation() {
   button.classList.add("bell-pop");
   clearTimeout(bellAnimationTimer);
   bellAnimationTimer = setTimeout(() => button.classList.remove("bell-pop"), 500);
+}
+
+function ensureGameCountdownOverlay() {
+  let overlay = $("#gameCountdownOverlay");
+  if (overlay) return overlay;
+  const board = $("#gameBoard");
+  if (!board) return null;
+  overlay = document.createElement("div");
+  overlay.id = "gameCountdownOverlay";
+  overlay.className = "game-countdown-overlay hidden";
+  overlay.setAttribute("aria-live", "assertive");
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML = `<strong id="gameCountdownNumber" class="game-countdown-number">3</strong>`;
+  board.appendChild(overlay);
+  return overlay;
+}
+
+function clearGameEntryCountdown() {
+  if (gameEntryCountdownTimer) clearTimeout(gameEntryCountdownTimer);
+  gameEntryCountdownTimer = null;
+  gameEntryCountdownToken += 1;
+  const overlay = $("#gameCountdownOverlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.classList.remove("is-pulse");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function startGameEntryCountdown(game, previousScreen) {
+  if (!game || game.isTutorial || game.status !== "playing" || previousScreen === "game") return;
+  const overlay = ensureGameCountdownOverlay();
+  const numberElement = $("#gameCountdownNumber");
+  if (!overlay || !numberElement) return;
+
+  const key = `${game.roomId || "game"}:${game.turnStartedAt || game.currentTurnPlayerId || Date.now()}`;
+  if (gameEntryCountdownKey === key) return;
+  gameEntryCountdownKey = key;
+  clearGameEntryCountdown();
+
+  const token = gameEntryCountdownToken;
+  const numbers = [3, 2, 1];
+  const showNumber = (index) => {
+    if (token !== gameEntryCountdownToken) return;
+    const number = numbers[index];
+    if (!number) {
+      overlay.classList.add("hidden");
+      overlay.classList.remove("is-pulse");
+      overlay.setAttribute("aria-hidden", "true");
+      gameEntryCountdownTimer = null;
+      return;
+    }
+
+    numberElement.textContent = String(number);
+    overlay.classList.remove("hidden");
+    overlay.classList.remove("is-pulse");
+    overlay.setAttribute("aria-hidden", "false");
+    void overlay.offsetWidth;
+    overlay.classList.add("is-pulse");
+    playBellSound();
+    playBellAnimation();
+
+    gameEntryCountdownTimer = setTimeout(() => showNumber(index + 1), 1000);
+  };
+
+  showNumber(0);
 }
 
 bgm.addEventListener("ended", playNextBgmTrack);
@@ -2004,8 +2073,8 @@ function updateResponsiveSizes() {
     const openWidth = Math.round(Math.min(72, mobileCardLimit));
     const deckWidth = Math.round(openWidth * 0.72);
     const deckOffset = deckWidth + Math.max(5, Math.round(openWidth * 0.06));
-    const bellSize = Math.round(Math.min(112, Math.max(90, mobileWidth * 0.25)));
-    const seatWidth = Math.round(openWidth + deckOffset + 10);
+    const bellSize = Math.round(Math.min(104, Math.max(84, mobileWidth * 0.235)));
+    const seatWidth = Math.round(openWidth + deckOffset + 18);
     const cardScale = openWidth / 160;
     const playerScale = Math.min(0.72, Math.max(0.56, cardScale));
     const timerScale = Math.min(0.78, Math.max(0.68, mobileWidth / 430));
@@ -2163,6 +2232,7 @@ function renderEmptyCardSpace() {
 
 function renderGame(game) {
   const previousRoomId = state.game?.roomId;
+  const previousScreen = state.activeScreen;
   state.game = game;
   state.room = null;
   if (previousRoomId !== game.roomId) {
@@ -2234,6 +2304,7 @@ function renderGame(game) {
   startTurnTimer(game);
   renderGameInfoPanel(game);
   updateMobileGameInfoPanel();
+  startGameEntryCountdown(game, previousScreen);
   updateMobileTouchHint(game);
   scheduleFlipAvailabilityRefresh(game);
   updateGameOverlay(game);
