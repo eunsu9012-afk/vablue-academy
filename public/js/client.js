@@ -398,6 +398,10 @@ function isBellAvailable(game = state.game) {
   return Object.values(totals).some((count) => count === 5);
 }
 
+function requestBell() {
+  socket.emit("ringBell");
+}
+
 function isFlipAvailable(game = state.game) {
   if (!state.assetsReady) return false;
   if (!isSelfAbleToAct(game)) return false;
@@ -500,31 +504,34 @@ function ensureMobileGameInfoMarkup() {
         <strong id="mobileLatencyValue">측정 중</strong>
       </div>
     </div>
-    <button id="mobileGameInfoToggleButton" class="mobile-game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
-    <div id="mobileGameInfoDetails" class="mobile-game-info-details hidden">
-      <section>
-        <h2>최근 정답 TOP3</h2>
-        <ol id="mobileReactionSpeedList" class="reaction-speed-list"></ol>
-      </section>
-      <section>
-        <h2>현재 게임 유저</h2>
-        <div id="mobileGameUserInfoList" class="game-user-info-list"></div>
-      </section>
+    <div class="mobile-game-actions" aria-label="모바일 게임 조작">
+      <button id="mobileBellButton" class="mobile-action-button mobile-bell-action" type="button">종치기</button>
+      <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action" type="button">카드 오픈</button>
     </div>
   `;
-  $("#mobileGameInfoToggleButton")?.addEventListener("click", (event) => {
+  $("#mobileBellButton")?.addEventListener("click", (event) => {
     event.stopPropagation();
-    state.mobileGameInfoExpanded = !state.mobileGameInfoExpanded;
-    updateMobileGameInfoPanel();
+    requestBell();
   });
+  $("#mobileFlipButton")?.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    if (!isFlipAvailable()) return;
+    await requestFlipCard();
+    updateMobileActionButtons();
+  });
+}
+
+function updateMobileActionButtons(game = state.game) {
+  const bellButton = $("#mobileBellButton");
+  const flipButton = $("#mobileFlipButton");
+  if (bellButton) bellButton.disabled = !(state.activeScreen === "game" && isSelfAbleToAct(game));
+  if (flipButton) flipButton.disabled = !isFlipAvailable(game);
 }
 
 function updateMobileGameInfoPanel() {
   const panel = $("#gameInfoPanel");
   const button = $("#gameInfoToggleButton");
   ensureMobileGameInfoMarkup();
-  const mobileButton = $("#mobileGameInfoToggleButton");
-  const mobileDetails = $("#mobileGameInfoDetails");
   const mobileStats = $("#mobileBoardStats");
   if (!panel || !button) return;
 
@@ -533,26 +540,17 @@ function updateMobileGameInfoPanel() {
   button.classList.toggle("hidden", true);
   if (mobileStats) {
     mobileStats.classList.toggle("hidden", !visible);
-    if (!visible) mobileStats.classList.remove("is-expanded");
   }
 
   if (!mobile) {
     panel.classList.remove("mobile-collapsed");
     button.setAttribute("aria-expanded", "true");
-    if (mobileButton) mobileButton.setAttribute("aria-expanded", "false");
-    if (mobileStats) mobileStats.classList.remove("is-expanded");
-    if (mobileDetails) mobileDetails.classList.add("hidden");
+    updateMobileActionButtons();
     return;
   }
 
-  const collapsed = !state.mobileGameInfoExpanded;
   panel.classList.add("mobile-collapsed");
-  if (mobileStats) mobileStats.classList.toggle("is-expanded", visible && !collapsed);
-  if (mobileButton) {
-    mobileButton.setAttribute("aria-expanded", String(!collapsed));
-    mobileButton.textContent = collapsed ? "게임 정보 ▼" : "게임 정보 ▲";
-  }
-  if (mobileDetails) mobileDetails.classList.toggle("hidden", collapsed);
+  updateMobileActionButtons();
 }
 
 function formatWinRate(value) {
@@ -1836,15 +1834,6 @@ function roomDisplayName(player) {
   return /^AI\s+/i.test(name) ? name : `AI ${name}`;
 }
 
-function renderRoomDetailItem(label, value) {
-  return `
-    <div class="room-detail-item">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-    </div>
-  `;
-}
-
 function renderRoomFanAvatar(player) {
   return renderFanAvatar({ avatarId: player?.avatarId || DEFAULT_FAN_CHARACTER_ID }, "lg");
 }
@@ -1900,19 +1889,6 @@ function renderEmptyRoomSlot(index) {
   `;
 }
 
-function renderRoomSettings(room) {
-  const settingsGrid = $("#roomSettingsGrid");
-  if (!settingsGrid) return;
-  settingsGrid.innerHTML = [
-    renderRoomDetailItem("게임 모드", `${modeLabel(room.mode)} 모드`),
-    renderRoomDetailItem("감점 배수", penaltyLabel(room.penaltyMultiplier)),
-    renderRoomDetailItem("턴 제한", `${Number(room.turnTime || 0)}초`),
-    renderRoomDetailItem("최대 인원", `${Number(room.maxPlayers || 6)}명`),
-    renderRoomDetailItem("비밀번호", room.hasPassword ? "사용" : "없음"),
-    renderRoomDetailItem("방 상태", roomStatusLabel(room.status)),
-  ].join("");
-}
-
 function updateRoomSummary(room) {
   const players = roomVisiblePlayers(room);
   const countText = `${players.length}/${room.maxPlayers}명`;
@@ -1951,7 +1927,6 @@ function renderRoom(room) {
   showScreen("room");
   setText("#roomTitle", room.title);
   updateRoomSummary(room);
-  renderRoomSettings(room);
   updateStartCountdownOverlay(room.countdown || null);
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
@@ -2277,9 +2252,7 @@ function renderGameInfoPanel(game) {
     });
   }
   renderReactionSpeeds(game.recentReactionSpeeds || []);
-  renderReactionSpeeds(game.recentReactionSpeeds || [], "#mobileReactionSpeedList");
   renderGameUsers(game.players || []);
-  renderGameUsers(game.players || [], "#mobileGameUserInfoList");
   renderLatency();
   renderMobileBoardStats(game);
 }
@@ -2387,6 +2360,7 @@ function renderMobileBoardStats(game = state.game) {
   reaction.textContent = top
     ? `${formatReactionPlayerName(top)} ${(Number(top.reactionMs || 0) / 1000).toFixed(3)}s`
     : "-";
+  updateMobileActionButtons(game);
 }
 
 function sendLatencyPing() {
@@ -2897,15 +2871,11 @@ $("#startGameButton").addEventListener("click", async () => {
   socket.emit("startGame");
 });
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
-$("#bellButton").addEventListener("click", () => socket.emit("ringBell"));
+$("#bellButton").addEventListener("click", requestBell);
 $("#tutorialBackButton")?.addEventListener("click", goBackTutorialStep);
 $("#tutorialNextButton")?.addEventListener("click", advanceTutorialStep);
 $("#tutorialCompleteButton")?.addEventListener("click", () => socket.emit("completeTutorial"));
 $("#gameBoard")?.addEventListener("pointerup", handleMobileGameBoardTouch);
-$("#gameInfoToggleButton")?.addEventListener("click", () => {
-  state.mobileGameInfoExpanded = !state.mobileGameInfoExpanded;
-  updateMobileGameInfoPanel();
-});
 $("#refreshLobbyButton")?.addEventListener("click", () => socket.emit("refreshLobby"));
 $("#lobbyRoomSearchInput")?.addEventListener("input", renderLobby);
 $("#lobbyModeFilter")?.addEventListener("change", renderLobby);

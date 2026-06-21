@@ -329,11 +329,6 @@
               </section>
 
               <aside class="room-side-panel" aria-label="방 설정과 액션">
-                <details class="room-settings-card bb-card room-mobile-collapsible-settings" open>
-                  <summary>방 정보</summary>
-                  <div id="roomSettingsGrid" class="room-detail-grid"></div>
-                </details>
-
                 <section class="room-ai-card bb-card">
                   <div class="room-side-card-title">
                     <div>
@@ -372,7 +367,7 @@
                 <details class="room-guide-card bb-card room-mobile-collapsible-settings" open>
                   <summary>안내</summary>
                   <p>방장을 제외한 모든 플레이어가 준비하면 게임을 시작할 수 있습니다.</p>
-                  <p>AI는 닉네임으로만 구분되며, 난이도는 이 설정 패널에서만 표시됩니다.</p>
+                  <p>AI 슬롯에는 닉네임과 난이도만 간단히 표시됩니다.</p>
                 </details>
               </aside>
             </div>
@@ -402,16 +397,9 @@
                     <strong id="mobileLatencyValue">측정 중</strong>
                   </div>
                 </div>
-                <button id="mobileGameInfoToggleButton" class="mobile-game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
-                <div id="mobileGameInfoDetails" class="mobile-game-info-details hidden">
-                  <section>
-                    <h2>최근 정답 TOP3</h2>
-                    <ol id="mobileReactionSpeedList" class="reaction-speed-list"></ol>
-                  </section>
-                  <section>
-                    <h2>현재 게임 유저</h2>
-                    <div id="mobileGameUserInfoList" class="game-user-info-list"></div>
-                  </section>
+                <div class="mobile-game-actions" aria-label="모바일 게임 조작">
+                  <button id="mobileBellButton" class="mobile-action-button mobile-bell-action" type="button">종치기</button>
+                  <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action" type="button">카드 오픈</button>
                 </div>
               </div>
             <button id="gameInfoToggleButton" class="game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>

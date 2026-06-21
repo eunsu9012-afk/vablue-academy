@@ -1194,9 +1194,9 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen #mobileBoardStats {
     display: grid;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
-    max-height: min(36vh, 250px);
+    max-height: min(34vh, 230px);
     overflow: hidden;
     border: 1px solid rgba(111, 159, 255, 0.34);
     border-radius: 16px;
@@ -1211,8 +1211,8 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(90px, 0.44fr);
-    gap: 8px;
+    grid-template-columns: 1fr;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -1242,45 +1242,49 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary strong {
     color: var(--bb-blue-900);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 950;
     font-variant-numeric: tabular-nums;
   }
 
-  body.is-game-screen #mobileBoardStats .mobile-game-info-toggle {
-    min-height: 34px;
-    border: 1px solid var(--bb-line);
-    border-radius: 12px;
-    background: var(--bb-surface);
-    color: var(--bb-blue-800);
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  body.is-game-screen #mobileBoardStats .mobile-game-info-details {
+  body.is-game-screen #mobileBoardStats .mobile-game-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px;
-    min-height: 0;
-    max-height: 142px;
-    overflow-y: auto;
-  }
-
-  body.is-game-screen #mobileBoardStats .mobile-game-info-details.hidden {
-    display: none;
-  }
-
-  body.is-game-screen #mobileBoardStats .mobile-game-info-details section {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
     gap: 6px;
     min-width: 0;
-    min-height: 0;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-action-button {
+    min-width: 0;
+    min-height: 44px;
     overflow: hidden;
-    border: 1px solid rgba(111, 159, 255, 0.22);
+    border: 1px solid rgba(111, 159, 255, 0.34);
     border-radius: 12px;
-    background: rgba(245, 249, 255, 0.82);
-    padding: 8px;
+    box-shadow: 0 6px 14px rgba(35, 83, 160, 0.1);
+    font-size: 14px;
+    font-weight: 950;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-bell-action {
+    border-color: rgba(30, 107, 255, 0.42);
+    background: linear-gradient(180deg, var(--bb-blue-600), var(--bb-blue-800));
+    color: #fff;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-flip-action {
+    background: linear-gradient(180deg, #ffffff, var(--bb-blue-100));
+    color: var(--bb-blue-900);
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-action-button:disabled {
+    cursor: default;
+    opacity: 0.48;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-info-toggle,
+  body.is-game-screen #mobileBoardStats .mobile-game-info-details {
+    display: none;
   }
 }
 
@@ -1373,6 +1377,16 @@ body.is-game-screen #mobileBoardStats {
   body.is-game-screen #gameScreen .front-card,
   body.is-game-screen #gameScreen .empty-card-space {
     border-radius: 8px;
+  }
+
+  body.is-game-screen #gameScreen .front-card.open-card::after,
+  body.is-game-screen #gameScreen .open-card-outer-frame,
+  body.is-game-screen #gameScreen .open-card-inner-frame {
+    display: none;
+  }
+
+  body.is-game-screen #gameScreen .open-card-face-layer {
+    inset: max(5px, 5%) max(5px, 5%);
   }
 
   body.is-game-screen #gameScreen .character-piece {
