@@ -1293,6 +1293,48 @@ body.is-game-screen #mobileBoardStats {
     --bb-mobile-header-h: 102px;
   }
 
+  body.is-game-screen #mobileBoardStats {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(52px, 1fr));
+    align-items: stretch;
+    gap: 6px;
+    height: clamp(118px, 15.5vh, 132px);
+    max-height: 132px;
+    padding: 6px;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-board-summary,
+  body.is-game-screen #mobileBoardStats .mobile-game-actions {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    min-height: 0;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-board-summary {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-board-summary > div {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 5px 8px;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-action-button {
+    min-height: 52px;
+    padding: 0 8px;
+  }
+
   body.is-game-screen #gameBoard {
     border-radius: 16px;
   }

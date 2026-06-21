@@ -495,18 +495,18 @@ function ensureMobileGameInfoMarkup() {
   root.dataset.enhanced = "true";
   root.innerHTML = `
     <div class="mobile-board-summary">
-      <div>
+      <div class="mobile-recent-answer">
         <span>최근 정답 TOP1</span>
         <strong id="mobileReactionTop">-</strong>
       </div>
-      <div>
+      <div class="mobile-server-latency">
         <span>서버 응답속도</span>
         <strong id="mobileLatencyValue">측정 중</strong>
       </div>
     </div>
     <div class="mobile-game-actions" aria-label="모바일 게임 조작">
       <button id="mobileBellButton" class="mobile-action-button mobile-bell-action" type="button">종치기</button>
-      <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action" type="button">카드 오픈</button>
+      <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action mobile-card-open-action" type="button">카드 오픈</button>
     </div>
   `;
   $("#mobileBellButton")?.addEventListener("click", (event) => {
