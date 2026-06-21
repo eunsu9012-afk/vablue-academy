@@ -473,16 +473,8 @@ function ensureMobileLobbyAccordions() {
 function updateMobileTouchHint(game = state.game) {
   const hint = $("#mobileTouchHint");
   if (!hint) return;
-  if (!isMobileMode() || state.activeScreen !== "game" || game?.resultVisible) {
-    hint.classList.add("hidden");
-    hint.replaceChildren();
-    return;
-  }
-  hint.innerHTML = `
-    <span class="mobile-bell-guide">종 터치</span>
-    <span class="mobile-open-guide">화면 터치: 카드 오픈</span>
-  `;
-  hint.classList.remove("hidden");
+  hint.classList.add("hidden");
+  hint.replaceChildren();
 }
 
 function ensureMobileGameInfoMarkup() {
@@ -1994,24 +1986,24 @@ function renderRoom(room) {
 function getSeatPosition(index, count) {
   if (isMobileMode()) return getMobileSeatPosition(index, count);
   const layouts = {
-    1: [{ left: 50, top: 76 }],
-    2: [{ left: 28, top: 52 }, { left: 72, top: 52 }],
-    3: [{ left: 28, top: 23 }, { left: 72, top: 23 }, { left: 50, top: 77 }],
-    4: [{ left: 26, top: 23 }, { left: 74, top: 23 }, { left: 26, top: 77 }, { left: 74, top: 77 }],
-    5: [{ left: 24, top: 23 }, { left: 50, top: 23 }, { left: 76, top: 23 }, { left: 37, top: 77 }, { left: 63, top: 77 }],
-    6: [{ left: 24, top: 23 }, { left: 50, top: 23 }, { left: 76, top: 23 }, { left: 24, top: 77 }, { left: 50, top: 77 }, { left: 76, top: 77 }],
+    1: [{ left: 50, top: 78 }],
+    2: [{ left: 25, top: 55 }, { left: 75, top: 55 }],
+    3: [{ left: 23, top: 34 }, { left: 77, top: 34 }, { left: 50, top: 80 }],
+    4: [{ left: 22, top: 33 }, { left: 78, top: 33 }, { left: 22, top: 77 }, { left: 78, top: 77 }],
+    5: [{ left: 20, top: 34 }, { left: 50, top: 21 }, { left: 80, top: 34 }, { left: 35, top: 80 }, { left: 65, top: 80 }],
+    6: [{ left: 20, top: 34 }, { left: 50, top: 21 }, { left: 80, top: 34 }, { left: 20, top: 78 }, { left: 50, top: 80.5 }, { left: 80, top: 78 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 50 };
 }
 
 function getMobileSeatPosition(index, count) {
   const layouts = {
-    1: [{ left: 50, top: 72 }],
-    2: [{ left: 28, top: 50 }, { left: 72, top: 50 }],
-    3: [{ left: 28, top: 24 }, { left: 72, top: 24 }, { left: 50, top: 74 }],
-    4: [{ left: 28, top: 24 }, { left: 72, top: 24 }, { left: 28, top: 74 }, { left: 72, top: 74 }],
-    5: [{ left: 27, top: 19 }, { left: 73, top: 19 }, { left: 27, top: 47 }, { left: 73, top: 47 }, { left: 50, top: 74 }],
-    6: [{ left: 27, top: 18 }, { left: 73, top: 18 }, { left: 27, top: 45 }, { left: 73, top: 45 }, { left: 27, top: 72 }, { left: 73, top: 72 }],
+    1: [{ left: 50, top: 78 }],
+    2: [{ left: 23, top: 52 }, { left: 77, top: 52 }],
+    3: [{ left: 20, top: 26 }, { left: 80, top: 26 }, { left: 50, top: 80 }],
+    4: [{ left: 20, top: 24 }, { left: 80, top: 24 }, { left: 20, top: 78 }, { left: 80, top: 78 }],
+    5: [{ left: 18, top: 18 }, { left: 82, top: 18 }, { left: 18, top: 50 }, { left: 82, top: 50 }, { left: 50, top: 82 }],
+    6: [{ left: 18, top: 17 }, { left: 82, top: 17 }, { left: 18, top: 50 }, { left: 82, top: 50 }, { left: 18, top: 83 }, { left: 82, top: 83 }],
   };
   return (layouts[count] || layouts[6])[index] || { left: 50, top: 66 };
 }
@@ -2025,11 +2017,12 @@ function updateResponsiveSizes() {
   const height = Math.max(420, Math.floor(boardRect?.height || window.innerHeight - 104));
   if (isMobileMode()) {
     const mobileWidth = Math.max(320, width);
-    const openWidth = Math.round(Math.min(74, Math.max(58, mobileWidth * 0.18)));
+    const mobileCardLimit = Math.max(58, Math.min(mobileWidth * 0.17, height / 7));
+    const openWidth = Math.round(Math.min(72, mobileCardLimit));
     const deckWidth = Math.round(openWidth * 0.72);
-    const deckOffset = deckWidth + Math.max(4, Math.round(openWidth * 0.06));
-    const bellSize = Math.round(Math.min(106, Math.max(78, mobileWidth * 0.24)));
-    const seatWidth = Math.round(openWidth + deckOffset + 8);
+    const deckOffset = deckWidth + Math.max(5, Math.round(openWidth * 0.06));
+    const bellSize = Math.round(Math.min(112, Math.max(90, mobileWidth * 0.25)));
+    const seatWidth = Math.round(openWidth + deckOffset + 10);
     const cardScale = openWidth / 160;
     const playerScale = Math.min(0.72, Math.max(0.56, cardScale));
     const timerScale = Math.min(0.78, Math.max(0.68, mobileWidth / 430));
@@ -2050,18 +2043,18 @@ function updateResponsiveSizes() {
     return;
   }
   const boardHeight = Math.max(420, height);
-  const tableScale = Math.min(1.35, Math.max(0.72, Math.min(width / 1030, height / 620)));
-  const targetByCount = count <= 2 ? 300 : count <= 3 ? 220 : count <= 4 ? 160 : count <= 5 ? 140 : 130;
-  const widthLimitByCount = count <= 2 ? width / 4.4 : count <= 3 ? width / 5.6 : count <= 4 ? width / 6.4 : width / 8.55;
-  const heightLimitByCount = count <= 2 ? boardHeight / 2.25 : count <= 3 ? boardHeight / 2.8 : count <= 4 ? boardHeight / 3.35 : boardHeight / 4.45;
+  const tableScale = Math.min(1.22, Math.max(0.82, Math.min(width / 1080, height / 640)));
+  const targetByCount = count <= 2 ? 300 : count <= 3 ? 225 : count <= 4 ? 168 : count <= 5 ? 144 : 136;
+  const widthLimitByCount = count <= 2 ? width / 4.2 : count <= 3 ? width / 5.4 : count <= 4 ? width / 6.1 : width / 7.65;
+  const heightLimitByCount = count <= 2 ? boardHeight / 2.15 : count <= 3 ? boardHeight / 2.7 : count <= 4 ? boardHeight / 3.15 : boardHeight / 4.22;
   let openWidth = Math.floor(Math.min(targetByCount * tableScale, widthLimitByCount, heightLimitByCount));
 
-  openWidth = Math.max(count >= 5 ? 112 : 122, openWidth);
-  const deckWidth = Math.max(78, Math.round(openWidth * 0.74));
-  const deckOffset = deckWidth + Math.max(5, Math.round(openWidth * 0.04));
-  const bellBase = count <= 2 ? 178 : count <= 4 ? 138 : 123;
-  const bellSize = Math.max(96, Math.min(210, Math.round(bellBase * tableScale)));
-  const seatWidth = Math.round(openWidth + deckOffset + 8);
+  openWidth = Math.max(count >= 5 ? 112 : 128, openWidth);
+  const deckWidth = Math.max(82, Math.round(openWidth * 0.72));
+  const deckOffset = deckWidth + Math.max(6, Math.round(openWidth * 0.05));
+  const bellBase = count <= 2 ? 180 : count <= 4 ? 150 : 136;
+  const bellSize = Math.max(112, Math.min(192, Math.round(bellBase * tableScale)));
+  const seatWidth = Math.round(openWidth + deckOffset + 14);
   const cardScale = openWidth / 160;
   const playerScale = Math.min(1.08, Math.max(0.72, cardScale));
   const timerScale = Math.min(1.05, Math.max(0.78, tableScale));
@@ -2087,7 +2080,7 @@ function cardIdentity(card) {
 
 function createPlayerZone(playerId) {
   const zone = document.createElement("article");
-  zone.className = "player-zone";
+  zone.className = "player-zone game-player-seat";
   zone.dataset.playerId = playerId;
   zone.innerHTML = `
     <div class="player-card-shell">
@@ -2214,6 +2207,7 @@ function renderGame(game) {
       ? `<span class="current-turn-chip">${isSelf ? "내 차례" : "차례"}</span>`
       : "";
     const statusBadges = [
+      player.isAI ? `<span class="player-badge ai-difficulty-chip">${aiDifficultyLabel(game.aiDifficulty)}</span>` : "",
       isSelf ? `<span class="player-badge self">나</span>` : "",
       player.spectator ? `<span class="player-badge spectator">관전</span>` : "",
     ].filter(Boolean).join("");

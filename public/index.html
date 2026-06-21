@@ -389,7 +389,9 @@
                 <span class="bell-fallback">종</span>
               </button>
               <div id="mobileTouchHint" class="mobile-touch-hint hidden" aria-live="polite"></div>
-              <div id="mobileBoardStats" class="mobile-board-stats" aria-live="polite">
+              <div id="resultOverlay" class="result-overlay hidden screen-result" data-design-reference="game-result"></div>
+            </div>
+            <div id="mobileBoardStats" class="mobile-board-stats" aria-live="polite">
                 <div class="mobile-board-summary">
                   <div>
                     <span>최근 정답 TOP1</span>
@@ -412,8 +414,6 @@
                   </section>
                 </div>
               </div>
-              <div id="resultOverlay" class="result-overlay hidden screen-result" data-design-reference="게임종료화면 디자인.png"></div>
-            </div>
             <button id="gameInfoToggleButton" class="game-info-toggle" type="button" aria-expanded="false">게임 정보 ▼</button>
             <aside id="gameInfoPanel" class="game-info-panel game-side-panel bb-panel" aria-label="게임 정보">
               <section class="game-info-card bb-card">
