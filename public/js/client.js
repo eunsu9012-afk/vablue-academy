@@ -46,11 +46,11 @@ const CARD_SLOTS = {
   5: { left: "78%", top: "78%" },
 };
 const CHARACTER_SIZE_BY_COUNT = {
-  1: "60%",
+  1: "62%",
   2: "45%",
-  3: "39%",
-  4: "35%",
-  5: "32%",
+  3: "41%",
+  4: "37%",
+  5: "34%",
 };
 const CARD_COLORS = {
   seolhong: "#ffe0ea",
@@ -2511,6 +2511,14 @@ function renderFrontCard(card, highlight = []) {
 
   const total = Math.max(1, card.items?.length || 1);
   element.dataset.faceCount = String(total);
+  const skin = document.createElement("div");
+  skin.className = "open-card-skin";
+  const outerFrame = document.createElement("div");
+  outerFrame.className = "open-card-outer-frame";
+  outerFrame.setAttribute("aria-hidden", "true");
+  const innerFrame = document.createElement("div");
+  innerFrame.className = "open-card-inner-frame";
+  innerFrame.setAttribute("aria-hidden", "true");
   const background = document.createElement("div");
   background.className = "open-card-background";
   background.setAttribute("aria-hidden", "true");
@@ -2518,11 +2526,12 @@ function renderFrontCard(card, highlight = []) {
   pattern.className = "open-card-pattern";
   pattern.setAttribute("aria-hidden", "true");
   const decoration = document.createElement("div");
-  decoration.className = "open-card-decoration";
+  decoration.className = "open-card-decoration-layer open-card-decoration";
   decoration.setAttribute("aria-hidden", "true");
   const faceLayer = document.createElement("div");
   faceLayer.className = "open-card-face-layer";
-  element.replaceChildren(background, pattern, decoration, faceLayer);
+  skin.replaceChildren(background, pattern, decoration, outerFrame, innerFrame, faceLayer);
+  element.replaceChildren(skin);
 
   for (const item of card.items || []) {
     const slot = CARD_SLOTS[item.slot] || CARD_SLOTS[3];
