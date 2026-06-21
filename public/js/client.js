@@ -85,6 +85,7 @@ const STATUS_ICONS = {
 const screens = {
   nickname: document.querySelector("#nicknameScreen"),
   lobby: document.querySelector("#lobbyScreen"),
+  tutorial: document.querySelector("#tutorialScreen"),
   room: document.querySelector("#roomScreen"),
   game: document.querySelector("#gameScreen"),
 };
@@ -114,6 +115,7 @@ const state = {
     waitingFor: null,
     seenCardId: null,
   },
+  tutorialGuideIndex: 0,
 };
 
 window.assetsReady = false;
@@ -231,6 +233,75 @@ const TUTORIAL_STEPS = [
   },
 ];
 
+const TUTORIAL_GUIDE_STEPS = [
+  {
+    key: "goal",
+    title: "게임 목표",
+    navTitle: "게임 목표",
+    summary: "공개 카드의 캐릭터 수를 빠르게 합산하세요.",
+    description: [
+      "모든 플레이어가 카드를 공개하며 같은 캐릭터가 정확히 5개 모이는 순간을 찾습니다.",
+      "정확한 타이밍에 종을 누르는 사람이 유리해집니다.",
+    ],
+    example: "goal",
+  },
+  {
+    key: "cards",
+    title: "카드와 캐릭터",
+    navTitle: "카드 보기",
+    summary: "내 카드만이 아니라 전체 공개 카드를 합산합니다.",
+    description: [
+      "카드에는 베이블루 캐릭터가 표시됩니다.",
+      "일반 모드는 단순하고, 하드 모드는 여러 캐릭터가 섞일 수 있습니다.",
+    ],
+    example: "cards",
+  },
+  {
+    key: "bell",
+    title: "종을 눌러야 하는 순간",
+    navTitle: "종 치기",
+    summary: "같은 캐릭터가 정확히 5개이면 종을 칩니다.",
+    description: [
+      "전체 공개 카드에서 특정 캐릭터 합계가 정확히 5개이면 정답입니다.",
+      "정답이면 점수를 지키고 상대에게 압박을 줄 수 있습니다.",
+    ],
+    example: "bell",
+  },
+  {
+    key: "wrong",
+    title: "누르면 안 되는 순간",
+    navTitle: "오답",
+    summary: "정확히 5개가 아닌데 종을 치면 패널티를 받습니다.",
+    description: [
+      "캐릭터 합계가 4개이거나 6개 이상이면 오답입니다.",
+      "빠른 판단만큼 정확한 확인이 중요합니다.",
+    ],
+    example: "wrong",
+  },
+  {
+    key: "time",
+    title: "턴 제한과 모드",
+    navTitle: "모드와 시간",
+    summary: "제한 시간 안에 카드를 공개하고 모드별 난이도를 확인하세요.",
+    description: [
+      "자기 차례에는 제한 시간 안에 카드를 공개해야 합니다.",
+      "하드 모드에서는 한 카드에 여러 캐릭터가 나와 더 신중해야 합니다.",
+    ],
+    example: "modes",
+  },
+  {
+    key: "score",
+    title: "점수와 승리 조건",
+    navTitle: "점수와 승리",
+    summary: "점수가 0 이하가 되면 탈락하고, 끝까지 남으면 승리합니다.",
+    description: [
+      "오답과 시간초과는 점수 손실로 이어집니다.",
+      "AI 포함 게임은 전적 반영 정책에 따라 별도로 처리될 수 있습니다.",
+    ],
+    example: "score",
+  },
+];
+
 function showScreen(name) {
   const previousScreen = state.activeScreen;
   Object.entries(screens).forEach(([screenName, element]) => {
@@ -238,6 +309,7 @@ function showScreen(name) {
   });
   state.activeScreen = name;
   document.body.classList.toggle("is-nickname-screen", name === "nickname");
+  document.body.classList.toggle("is-tutorial-screen", name === "tutorial");
   document.body.classList.toggle("is-game-screen", name === "game");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
@@ -1296,6 +1368,224 @@ function updateLobbyRankingPanelState() {
   panel.classList.toggle("collapsed", collapsed);
   toggle.textContent = collapsed ? "펼치기" : "접기";
   toggle.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function tutorialGuideStep() {
+  return TUTORIAL_GUIDE_STEPS[state.tutorialGuideIndex] || TUTORIAL_GUIDE_STEPS[0];
+}
+
+function tutorialAsset(src, alt, className = "") {
+  const fallback = String(alt || "•").trim().slice(0, 1) || "•";
+  return `
+    <span class="tutorial-asset ${className}" data-fallback="${escapeHtml(fallback)}">
+      <img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" />
+    </span>
+  `;
+}
+
+function tutorialCharacterCard(name, src, count, tone = "blue") {
+  return `
+    <div class="tutorial-character-card tone-${escapeHtml(tone)}">
+      ${tutorialAsset(src, name, "character-asset")}
+      <strong>${escapeHtml(name)}</strong>
+      <span>${escapeHtml(String(count))}개</span>
+    </div>
+  `;
+}
+
+function attachTutorialImageFallbacks() {
+  document.querySelectorAll(".tutorial-asset img").forEach((image) => {
+    image.addEventListener("error", (event) => {
+      const holder = event.currentTarget.closest(".tutorial-asset");
+      holder?.classList.add("image-missing");
+      event.currentTarget.remove();
+    }, { once: true });
+  });
+}
+
+function renderTutorialExample(step) {
+  const cardBack = CARD_BACK_ASSET;
+  const bell = BELL_IMAGE_ASSET;
+  if (step.example === "goal") {
+    return `
+      <div class="tutorial-board-example">
+        <div class="mini-card-ring">
+          ${tutorialAsset(cardBack, "카드 뒷면", "card-back-asset")}
+          ${tutorialAsset(cardBack, "카드 뒷면", "card-back-asset")}
+          ${tutorialAsset(bell, "종", "bell-asset")}
+          ${tutorialAsset(cardBack, "카드 뒷면", "card-back-asset")}
+          ${tutorialAsset(cardBack, "카드 뒷면", "card-back-asset")}
+        </div>
+        <p>모든 공개 카드를 보고 같은 캐릭터 수를 합산합니다.</p>
+      </div>
+    `;
+  }
+  if (step.example === "cards") {
+    return `
+      <div class="tutorial-card-grid-example">
+        ${tutorialCharacterCard("눈요", CHARACTER_ASSETS.nunyo, 2)}
+        ${tutorialCharacterCard("설홍", CHARACTER_ASSETS.seolhong, 1, "red")}
+        ${tutorialCharacterCard("루첼", CHARACTER_ASSETS.ruchel, 2, "gold")}
+        ${tutorialCharacterCard("최애리", CHARACTER_ASSETS.choiaeri, 1, "red")}
+      </div>
+    `;
+  }
+  if (step.example === "bell") {
+    return `
+      <div class="tutorial-answer-example is-correct">
+        <div class="tutorial-card-grid-example compact">
+          ${tutorialCharacterCard("루첼", CHARACTER_ASSETS.ruchel, 2, "gold")}
+          ${tutorialCharacterCard("루첼", CHARACTER_ASSETS.ruchel, 3, "gold")}
+          ${tutorialCharacterCard("나노", CHARACTER_ASSETS.nano, 1)}
+        </div>
+        <div class="tutorial-bell-result">
+          ${tutorialAsset(bell, "종", "bell-asset")}
+          <strong>정답!</strong>
+          <span>루첼 5개</span>
+        </div>
+      </div>
+    `;
+  }
+  if (step.example === "wrong") {
+    return `
+      <div class="tutorial-answer-example is-wrong">
+        <div class="tutorial-card-grid-example compact">
+          ${tutorialCharacterCard("나노", CHARACTER_ASSETS.nano, 2)}
+          ${tutorialCharacterCard("나노", CHARACTER_ASSETS.nano, 2)}
+          ${tutorialCharacterCard("여우연", CHARACTER_ASSETS.yeowooyeon, 1, "red")}
+        </div>
+        <div class="tutorial-bell-result">
+          ${tutorialAsset(bell, "종", "bell-asset")}
+          <strong>오답</strong>
+          <span>나노 4개</span>
+        </div>
+      </div>
+    `;
+  }
+  if (step.example === "modes") {
+    return `
+      <div class="tutorial-info-tiles">
+        <article>
+          <strong>일반 모드</strong>
+          <span>카드 구성이 단순해서 처음 익히기 좋습니다.</span>
+        </article>
+        <article>
+          <strong>하드 모드</strong>
+          <span>여러 캐릭터가 섞여 더 빠른 합산이 필요합니다.</span>
+        </article>
+        <article>
+          <strong>턴 제한</strong>
+          <span>시간 안에 카드를 공개하지 않으면 패널티가 생깁니다.</span>
+        </article>
+      </div>
+    `;
+  }
+  return `
+    <div class="tutorial-score-board">
+      <article><span>시작</span><strong>점수 보유</strong></article>
+      <article><span>오답</span><strong>감점</strong></article>
+      <article><span>탈락</span><strong>0점 이하</strong></article>
+      <article><span>승리</span><strong>끝까지 생존</strong></article>
+    </div>
+  `;
+}
+
+function renderTutorialSideSummaries() {
+  const ruleList = $("#tutorialRuleSummary");
+  if (ruleList) {
+    ruleList.innerHTML = [
+      "모든 공개 카드를 동시에 확인합니다.",
+      "같은 캐릭터가 정확히 5개이면 종을 칩니다.",
+      "4개이거나 6개 이상이면 종을 누르지 않습니다.",
+    ].map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  }
+  const scoreSummary = $("#tutorialScoreSummary");
+  if (scoreSummary) {
+    scoreSummary.innerHTML = `
+      <article><span>오답</span><strong>점수 감소</strong></article>
+      <article><span>시간초과</span><strong>패널티</strong></article>
+      <article><span>승리</span><strong>최종 생존</strong></article>
+    `;
+  }
+  const modeSummary = $("#tutorialModeSummary");
+  if (modeSummary) {
+    modeSummary.innerHTML = `
+      <article><strong>일반</strong><span>기본 규칙 연습</span></article>
+      <article><strong>하드</strong><span>복합 카드 등장</span></article>
+      <article><strong>AI</strong><span>함께 연습 가능</span></article>
+    `;
+  }
+}
+
+function renderTutorialScreen() {
+  if (!screens.tutorial) return;
+  const step = tutorialGuideStep();
+  const total = TUTORIAL_GUIDE_STEPS.length;
+  setText("#tutorialGuideStepLabel", `${state.tutorialGuideIndex + 1} / ${total}`);
+  setText("#tutorialGuideTitle", step.title);
+  const description = $("#tutorialGuideDescription");
+  if (description) {
+    description.innerHTML = step.description.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+  }
+  const example = $("#tutorialExampleArea");
+  if (example) {
+    example.innerHTML = renderTutorialExample(step);
+  }
+  const nav = $("#tutorialStepNav");
+  if (nav) {
+    nav.innerHTML = TUTORIAL_GUIDE_STEPS.map((item, index) => `
+      <button class="tutorial-step-item ${index === state.tutorialGuideIndex ? "is-active" : ""}" type="button" data-step-index="${index}" aria-current="${index === state.tutorialGuideIndex ? "step" : "false"}">
+        <span>${index + 1}</span>
+        <strong>${escapeHtml(item.navTitle)}</strong>
+      </button>
+    `).join("");
+    nav.querySelectorAll(".tutorial-step-item").forEach((button) => {
+      button.addEventListener("click", () => goToTutorialGuideStep(Number(button.dataset.stepIndex || 0)));
+    });
+  }
+  const dots = $("#tutorialProgressDots");
+  if (dots) {
+    dots.innerHTML = TUTORIAL_GUIDE_STEPS.map((_, index) => `<span class="${index === state.tutorialGuideIndex ? "is-active" : ""}"></span>`).join("");
+  }
+  const prev = $("#tutorialPrevButton");
+  const next = $("#tutorialNextGuideButton");
+  if (prev) prev.disabled = state.tutorialGuideIndex <= 0;
+  if (next) next.textContent = state.tutorialGuideIndex >= total - 1 ? "로비로 돌아가기" : "다음 단계";
+  renderTutorialSideSummaries();
+  attachTutorialImageFallbacks();
+}
+
+function goToTutorialGuideStep(index) {
+  state.tutorialGuideIndex = Math.max(0, Math.min(TUTORIAL_GUIDE_STEPS.length - 1, Number(index || 0)));
+  renderTutorialScreen();
+}
+
+function openTutorialScreen() {
+  closeSettingsPanel();
+  resetTutorialState(false);
+  hideTutorialOverlay();
+  state.tutorialGuideIndex = 0;
+  renderTutorialScreen();
+  showScreen("tutorial");
+}
+
+function returnToLobbyFromTutorial() {
+  resetTutorialState(false);
+  hideTutorialOverlay();
+  showScreen("lobby");
+}
+
+function goPrevTutorialGuideStep() {
+  if (state.tutorialGuideIndex <= 0) return;
+  goToTutorialGuideStep(state.tutorialGuideIndex - 1);
+}
+
+function goNextTutorialGuideStep() {
+  if (state.tutorialGuideIndex >= TUTORIAL_GUIDE_STEPS.length - 1) {
+    returnToLobbyFromTutorial();
+    return;
+  }
+  goToTutorialGuideStep(state.tutorialGuideIndex + 1);
 }
 
 function getTutorialStep() {
@@ -2383,12 +2673,10 @@ $("#randomProfileButton")?.addEventListener("click", randomizeProfile);
 $("#nicknameInput")?.addEventListener("input", syncNicknameSubmitState);
 $("#openCreateRoomButton").addEventListener("click", openCreateRoomModal);
 $("#guideToggleButton")?.addEventListener("click", toggleLobbyGuide);
-$("#tutorialButton")?.addEventListener("click", async () => {
-  closeSettingsPanel();
-  await ensureAssetsReady();
-  resetTutorialState(true);
-  socket.emit("startTutorial");
-});
+$("#tutorialButton")?.addEventListener("click", openTutorialScreen);
+$("#tutorialHeaderLobbyButton")?.addEventListener("click", returnToLobbyFromTutorial);
+$("#tutorialPrevButton")?.addEventListener("click", goPrevTutorialGuideStep);
+$("#tutorialNextGuideButton")?.addEventListener("click", goNextTutorialGuideStep);
 $("#closeCreateRoomModalButton").addEventListener("click", closeCreateRoomModal);
 $("#cancelCreateRoomButton")?.addEventListener("click", closeCreateRoomModal);
 $("#createRoomModal").addEventListener("click", (event) => {

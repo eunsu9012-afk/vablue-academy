@@ -1,47 +1,613 @@
 @charset "UTF-8";
 
-/* Stage 5 target: tutorial mockup.
-   Current DOM is still an overlay. Later work should split explanation pages
-   from live practice so guide text never covers deck, open cards, or bell. */
+/* Stage 5: standalone tutorial screen. */
 
-.tutorial-overlay {
-  position: fixed;
-  inset: auto var(--bb-space-5) var(--bb-space-5) auto;
-  z-index: var(--bb-z-overlay);
-  width: min(420px, calc(100vw - 32px));
-  pointer-events: none;
+body.is-tutorial-screen {
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 244, 199, 0.74), transparent 280px),
+    radial-gradient(circle at 92% 12%, rgba(207, 226, 255, 0.9), transparent 320px),
+    linear-gradient(135deg, #f7fbff 0%, #eaf4ff 56%, #fff4fa 100%);
 }
 
-.tutorial-overlay.hidden {
+body.is-tutorial-screen .topbar {
   display: none;
 }
 
-.tutorial-card {
+.screen-tutorial {
   display: grid;
-  gap: var(--bb-space-3);
-  max-height: min(36vh, 320px);
+  height: var(--app-height, 100dvh);
+  min-height: 0;
+  max-width: none;
   overflow: hidden;
-  border: 1px solid var(--bb-line);
-  border-radius: var(--bb-radius-lg);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: var(--bb-shadow-floating);
-  padding: var(--bb-space-4);
+  padding: clamp(16px, 2vw, 28px);
 }
 
-.tutorial-message {
+.screen-tutorial.hidden {
+  display: none;
+}
+
+.tutorial-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(100%, 1420px);
   min-width: 0;
-  max-height: 6em;
+  height: 100%;
+  min-height: 0;
+  gap: clamp(14px, 1.6vw, 18px);
+  margin-inline: auto;
+}
+
+.tutorial-header,
+.tutorial-step-nav-panel,
+.tutorial-main-panel,
+.tutorial-side-panel > section {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.34);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--bb-shadow-panel);
+}
+
+.tutorial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 28px;
+  padding: clamp(14px, 2vw, 22px);
+}
+
+.tutorial-brand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tutorial-logo {
+  display: grid;
+  width: clamp(66px, 5.8vw, 92px);
+  height: clamp(66px, 5.8vw, 92px);
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.38);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff, var(--bb-blue-100));
+  box-shadow: 0 14px 30px rgba(35, 83, 160, 0.14);
+}
+
+.tutorial-logo img {
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+}
+
+.tutorial-title-copy {
+  min-width: 0;
+}
+
+.tutorial-eyebrow,
+.tutorial-step-label {
+  margin: 0;
+  color: var(--bb-blue-600);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tutorial-title-copy h1 {
+  margin: 3px 0 5px;
+  overflow: hidden;
+  color: var(--bb-blue-950);
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 950;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-title-copy p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--bb-text-sub);
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-header-actions {
+  flex: 0 0 auto;
+}
+
+.tutorial-header-actions .secondary-button {
+  min-height: 44px;
+  border-radius: 15px;
+  padding-inline: 20px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.tutorial-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 260px) minmax(0, 1fr) minmax(290px, 330px);
+  gap: clamp(12px, 1.4vw, 18px);
+  min-width: 0;
+  min-height: 0;
+}
+
+.tutorial-step-nav-panel,
+.tutorial-main-panel,
+.tutorial-side-panel {
+  min-height: 0;
+}
+
+.tutorial-step-nav-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-radius: 24px;
+  padding: 14px;
+}
+
+.tutorial-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--bb-blue-950);
+  font-weight: 950;
+}
+
+.tutorial-panel-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-step-nav {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.tutorial-step-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 48px;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.26);
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--bb-blue-900);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.tutorial-step-item span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(111, 159, 255, 0.36);
+  border-radius: 50%;
+  background: var(--bb-blue-50);
+  color: var(--bb-blue-700);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.tutorial-step-item strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-step-item.is-active {
+  border-color: var(--bb-primary);
+  background: linear-gradient(180deg, var(--bb-blue-600), var(--bb-blue-700));
+  color: #ffffff;
+  box-shadow: var(--bb-shadow-button);
+}
+
+.tutorial-step-item.is-active span {
+  border-color: rgba(255, 255, 255, 0.52);
+  background: #ffffff;
+}
+
+.tutorial-tip-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(246, 183, 53, 0.38);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff9e8, #ffffff);
+  color: var(--bb-text-sub);
+  padding: 12px;
+}
+
+.tutorial-tip-card strong {
+  color: #d99100;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.tutorial-tip-card p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.42;
+}
+
+.tutorial-main-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 251, 255, 0.96)),
+    #ffffff;
+  padding: 14px;
+}
+
+.tutorial-step-card {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(111, 159, 255, 0.22);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: clamp(16px, 1.8vw, 22px);
+  scrollbar-width: thin;
+}
+
+.tutorial-step-card h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--bb-blue-950);
+  font-size: clamp(24px, 2.4vw, 34px);
+  font-weight: 950;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-step-description {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tutorial-step-description p {
   margin: 0;
   color: var(--bb-text-sub);
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.45;
 }
 
-.tutorial-actions {
+.tutorial-example-area {
+  min-width: 0;
+  min-height: 0;
+}
+
+.tutorial-board-example,
+.tutorial-answer-example,
+.tutorial-card-grid-example,
+.tutorial-info-tiles,
+.tutorial-score-board {
+  min-width: 0;
+}
+
+.tutorial-board-example {
+  display: grid;
+  gap: 14px;
+  place-items: center;
+  border: 1px solid rgba(111, 159, 255, 0.22);
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 45%, rgba(207, 226, 255, 0.84), rgba(255, 255, 255, 0.82));
+  padding: 18px;
+  text-align: center;
+}
+
+.tutorial-board-example p {
+  margin: 0;
+  color: var(--bb-blue-900);
+  font-weight: 900;
+}
+
+.mini-card-ring {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 86px));
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.tutorial-asset {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.26);
+  background: linear-gradient(180deg, #ffffff, var(--bb-blue-100));
+  color: var(--bb-blue-700);
+  font-weight: 950;
+}
+
+.tutorial-asset img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tutorial-asset.image-missing::before {
+  content: attr(data-fallback);
+}
+
+.card-back-asset {
+  width: 76px;
+  height: 92px;
+  border-radius: 14px;
+  padding: 7px;
+}
+
+.bell-asset {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  padding: 10px;
+  box-shadow: 0 10px 24px rgba(30, 107, 255, 0.16);
+}
+
+.character-asset {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  padding: 4px;
+}
+
+.tutorial-card-grid-example {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tutorial-card-grid-example.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tutorial-character-card {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.24);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 10px 8px;
+}
+
+.tutorial-character-card strong,
+.tutorial-character-card span {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-character-card strong {
+  color: var(--bb-blue-950);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.tutorial-character-card span {
+  border-radius: 999px;
+  background: var(--bb-blue-100);
+  color: var(--bb-blue-700);
+  font-size: 12px;
+  font-weight: 950;
+  padding: 4px 8px;
+}
+
+.tutorial-character-card.tone-red span {
+  background: var(--bb-red-soft);
+  color: var(--bb-red);
+}
+
+.tutorial-character-card.tone-gold span {
+  background: var(--bb-gold-soft);
+  color: #b87900;
+}
+
+.tutorial-answer-example {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.36fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.tutorial-bell-result {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(111, 159, 255, 0.24);
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 12px;
+  text-align: center;
+}
+
+.tutorial-bell-result strong {
+  color: var(--bb-blue-950);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.tutorial-bell-result span {
+  color: var(--bb-text-sub);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.tutorial-answer-example.is-correct .tutorial-bell-result {
+  border-color: rgba(34, 184, 112, 0.34);
+  background: var(--bb-green-soft);
+}
+
+.tutorial-answer-example.is-wrong .tutorial-bell-result {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: var(--bb-red-soft);
+}
+
+.tutorial-info-tiles,
+.tutorial-score-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tutorial-score-board {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tutorial-info-tiles article,
+.tutorial-score-board article,
+.tutorial-score-summary article,
+.tutorial-mode-summary article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(245, 249, 255, 0.86);
+  padding: 12px;
+}
+
+.tutorial-info-tiles strong,
+.tutorial-score-board strong,
+.tutorial-score-summary strong,
+.tutorial-mode-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--bb-blue-950);
+  font-size: 14px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-info-tiles span,
+.tutorial-score-board span,
+.tutorial-score-summary span,
+.tutorial-mode-summary span {
+  color: var(--bb-text-sub);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.tutorial-footer-actions {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.4fr) minmax(120px, 1fr) minmax(150px, 0.46fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tutorial-footer-actions button {
+  min-height: 46px;
+  border-radius: 15px;
+  font-weight: 950;
+}
+
+.tutorial-progress-dots {
   display: flex;
-  gap: var(--bb-space-2);
-  flex-wrap: wrap;
-  pointer-events: auto;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tutorial-progress-dots span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(111, 159, 255, 0.34);
+}
+
+.tutorial-progress-dots span.is-active {
+  width: 28px;
+  border-radius: 999px;
+  background: var(--bb-blue-600);
+}
+
+.tutorial-side-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.tutorial-side-panel > section {
+  display: grid;
+  gap: 10px;
+  border-radius: 22px;
+  padding: 14px;
+}
+
+.tutorial-side-panel h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--bb-blue-950);
+  font-size: 17px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-rule-summary ul {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.tutorial-rule-summary li {
+  color: var(--bb-text-sub);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.tutorial-score-summary > div,
+.tutorial-mode-summary > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 .tutorial-highlight {
@@ -49,14 +615,223 @@
   outline-offset: 4px;
 }
 
-@media (max-width: 767px) {
-  .tutorial-overlay {
-    inset: auto var(--bb-space-3) calc(var(--bb-safe-bottom) + var(--bb-space-3));
-    width: auto;
+@media (max-width: 1279px) {
+  .tutorial-layout {
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
   }
 
-  .tutorial-card {
-    max-height: 28vh;
-    padding: var(--bb-space-3);
+  .tutorial-side-panel {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-height: 760px) {
+  .screen-tutorial {
+    padding: 12px;
+  }
+
+  .tutorial-header {
+    padding: 12px 14px;
+  }
+
+  .tutorial-logo {
+    width: 56px;
+    height: 56px;
+  }
+
+  .tutorial-title-copy h1 {
+    font-size: 26px;
+  }
+
+  .tutorial-layout {
+    gap: 10px;
+  }
+
+  .tutorial-step-nav-panel,
+  .tutorial-main-panel,
+  .tutorial-side-panel > section {
+    padding: 10px;
+  }
+
+  .tutorial-step-item {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 767px) {
+  .screen-tutorial {
+    align-items: start;
+    height: auto;
+    min-height: var(--app-height, 100dvh);
+    overflow-y: auto;
+    padding: 12px 12px calc(18px + var(--bb-safe-bottom));
+  }
+
+  .tutorial-page {
+    display: grid;
+    gap: 12px;
+  }
+
+  .tutorial-header {
+    border-radius: 22px;
+    padding: 12px;
+  }
+
+  .tutorial-brand {
+    gap: 10px;
+  }
+
+  .tutorial-logo {
+    width: 52px;
+    height: 52px;
+  }
+
+  .tutorial-title-copy h1 {
+    font-size: clamp(21px, 5.8vw, 28px);
+  }
+
+  .tutorial-title-copy p {
+    font-size: 12px;
+    white-space: normal;
+  }
+
+  .tutorial-header-actions .secondary-button {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+
+  .tutorial-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tutorial-main-panel {
+    order: 1;
+    gap: 10px;
+    border-radius: 22px;
+    padding: 12px;
+  }
+
+  .tutorial-step-nav-panel {
+    order: 2;
+    border-radius: 20px;
+    padding: 12px;
+  }
+
+  .tutorial-side-panel {
+    order: 3;
+    grid-template-columns: 1fr;
+  }
+
+  .tutorial-step-card {
+    gap: 10px;
+    border-radius: 18px;
+    overflow: visible;
+    padding: 14px;
+  }
+
+  .tutorial-step-card h2 {
+    font-size: 24px;
+  }
+
+  .tutorial-step-description p {
+    font-size: 13px;
+  }
+
+  .tutorial-step-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tutorial-step-item {
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: 44px;
+    border-radius: 14px;
+  }
+
+  .tutorial-tip-card {
+    display: none;
+  }
+
+  .mini-card-ring {
+    grid-template-columns: repeat(3, minmax(0, 76px));
+  }
+
+  .card-back-asset {
+    width: 64px;
+    height: 76px;
+  }
+
+  .bell-asset {
+    width: 72px;
+    height: 72px;
+  }
+
+  .tutorial-card-grid-example,
+  .tutorial-card-grid-example.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tutorial-answer-example {
+    grid-template-columns: 1fr;
+  }
+
+  .tutorial-info-tiles,
+  .tutorial-score-board {
+    grid-template-columns: 1fr;
+  }
+
+  .tutorial-footer-actions {
+    position: sticky;
+    bottom: max(8px, var(--bb-safe-bottom));
+    z-index: var(--bb-z-sticky);
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    border: 1px solid rgba(111, 159, 255, 0.28);
+    border-radius: 20px;
+    background: rgba(247, 251, 255, 0.94);
+    box-shadow: var(--bb-shadow-floating);
+    padding: 8px;
+    backdrop-filter: blur(12px);
+  }
+
+  .tutorial-progress-dots {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  #tutorialPrevButton {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #tutorialNextGuideButton {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .tutorial-footer-actions button {
+    min-height: 44px;
+  }
+
+  .tutorial-side-panel > section {
+    border-radius: 18px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 374px) {
+  .screen-tutorial {
+    padding-inline: 10px;
+  }
+
+  .tutorial-header,
+  .tutorial-main-panel,
+  .tutorial-step-nav-panel,
+  .tutorial-side-panel > section {
+    padding: 10px;
+  }
+
+  .tutorial-step-nav {
+    grid-template-columns: 1fr;
   }
 }
