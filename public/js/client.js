@@ -139,9 +139,12 @@ let flipAvailabilityTimer = null;
 let tutorialAdvanceTimer = null;
 let startCountdownTimer = null;
 let lastStartCountdownNumber = null;
-let gameEntryCountdownTimer = null;
-let gameEntryCountdownKey = null;
-let gameEntryCountdownToken = 0;
+let preGameCountdownTimer = null;
+let preGameCountdownPromise = null;
+let preGameCountdownToken = 0;
+let preGameCountdownCompletedAt = 0;
+let pendingPreGameState = null;
+let startGameRequestPending = false;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 const pendingLatencyPings = new Map();
@@ -324,10 +327,10 @@ function showScreen(name) {
   document.body.classList.toggle("is-game-screen", name === "game");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
+  if (name !== "room" && name !== "game") cancelPreGameCountdown();
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
   if (name !== "game") {
-    clearGameEntryCountdown();
     document.body.classList.remove("is-tutorial-game");
     stopTurnTimer();
     clearFlipAvailabilityTimer();
@@ -1054,69 +1057,86 @@ function playBellAnimation() {
   bellAnimationTimer = setTimeout(() => button.classList.remove("bell-pop"), 500);
 }
 
-function ensureGameCountdownOverlay() {
-  let overlay = $("#gameCountdownOverlay");
+function ensurePreGameCountdownOverlay() {
+  let overlay = $("#preGameCountdownOverlay");
   if (overlay) return overlay;
-  const board = $("#gameBoard");
-  if (!board) return null;
   overlay = document.createElement("div");
-  overlay.id = "gameCountdownOverlay";
-  overlay.className = "game-countdown-overlay hidden";
+  overlay.id = "preGameCountdownOverlay";
+  overlay.className = "pre-game-countdown-overlay hidden";
   overlay.setAttribute("aria-live", "assertive");
   overlay.setAttribute("aria-hidden", "true");
-  overlay.innerHTML = `<strong id="gameCountdownNumber" class="game-countdown-number">3</strong>`;
-  board.appendChild(overlay);
+  overlay.innerHTML = `<strong id="preGameCountdownNumber" class="pre-game-countdown-number">3</strong>`;
+  document.body.appendChild(overlay);
   return overlay;
 }
 
-function clearGameEntryCountdown() {
-  if (gameEntryCountdownTimer) clearTimeout(gameEntryCountdownTimer);
-  gameEntryCountdownTimer = null;
-  gameEntryCountdownToken += 1;
-  const overlay = $("#gameCountdownOverlay");
+function hidePreGameCountdownOverlay() {
+  const overlay = $("#preGameCountdownOverlay");
   if (!overlay) return;
   overlay.classList.add("hidden");
   overlay.classList.remove("is-pulse");
   overlay.setAttribute("aria-hidden", "true");
 }
 
-function startGameEntryCountdown(game, previousScreen) {
-  if (!game || game.isTutorial || game.status !== "playing" || previousScreen === "game") return;
-  const overlay = ensureGameCountdownOverlay();
-  const numberElement = $("#gameCountdownNumber");
+function showPreGameCountdownNumber(number) {
+  const overlay = ensurePreGameCountdownOverlay();
+  const numberElement = $("#preGameCountdownNumber");
   if (!overlay || !numberElement) return;
+  numberElement.textContent = String(number);
+  overlay.classList.remove("hidden");
+  overlay.classList.remove("is-pulse");
+  overlay.setAttribute("aria-hidden", "false");
+  void overlay.offsetWidth;
+  overlay.classList.add("is-pulse");
+  playBellSound();
+}
 
-  const key = `${game.roomId || "game"}:${game.turnStartedAt || game.currentTurnPlayerId || Date.now()}`;
-  if (gameEntryCountdownKey === key) return;
-  gameEntryCountdownKey = key;
-  clearGameEntryCountdown();
-
-  const token = gameEntryCountdownToken;
+function runPreGameCountdown() {
+  if (preGameCountdownPromise) return preGameCountdownPromise;
+  preGameCountdownToken += 1;
+  const token = preGameCountdownToken;
   const numbers = [3, 2, 1];
-  const showNumber = (index) => {
-    if (token !== gameEntryCountdownToken) return;
-    const number = numbers[index];
-    if (!number) {
-      overlay.classList.add("hidden");
-      overlay.classList.remove("is-pulse");
-      overlay.setAttribute("aria-hidden", "true");
-      gameEntryCountdownTimer = null;
-      return;
-    }
 
-    numberElement.textContent = String(number);
-    overlay.classList.remove("hidden");
-    overlay.classList.remove("is-pulse");
-    overlay.setAttribute("aria-hidden", "false");
-    void overlay.offsetWidth;
-    overlay.classList.add("is-pulse");
-    playBellSound();
-    playBellAnimation();
+  preGameCountdownPromise = new Promise((resolve) => {
+    const showNumber = (index) => {
+      if (token !== preGameCountdownToken) {
+        resolve();
+        return;
+      }
+      const number = numbers[index];
+      if (!number) {
+        hidePreGameCountdownOverlay();
+        preGameCountdownCompletedAt = Date.now();
+        preGameCountdownTimer = null;
+        resolve();
+        return;
+      }
+      showPreGameCountdownNumber(number);
+      preGameCountdownTimer = setTimeout(() => showNumber(index + 1), 1000);
+    };
+    showNumber(0);
+  }).finally(() => {
+    preGameCountdownPromise = null;
+  });
 
-    gameEntryCountdownTimer = setTimeout(() => showNumber(index + 1), 1000);
-  };
+  return preGameCountdownPromise;
+}
 
-  showNumber(0);
+function shouldDelayGameScreenForPreGameCountdown(game) {
+  if (!game || game.isTutorial || game.status !== "playing") return false;
+  if (state.activeScreen === "game") return false;
+  const overlayVisible = !$("#preGameCountdownOverlay")?.classList.contains("hidden");
+  if (state.activeScreen === "room" && lastStartCountdownNumber !== null && overlayVisible) return false;
+  return Date.now() - preGameCountdownCompletedAt > 1400;
+}
+
+function cancelPreGameCountdown() {
+  if (preGameCountdownTimer) clearTimeout(preGameCountdownTimer);
+  preGameCountdownTimer = null;
+  preGameCountdownToken += 1;
+  preGameCountdownPromise = null;
+  pendingPreGameState = null;
+  hidePreGameCountdownOverlay();
 }
 
 bgm.addEventListener("ended", playNextBgmTrack);
@@ -1847,15 +1867,7 @@ function handleTutorialBellResult(payload) {
 }
 
 function ensureStartCountdownOverlay() {
-  let overlay = $("#startCountdownOverlay");
-  if (overlay) return overlay;
-  overlay = document.createElement("div");
-  overlay.id = "startCountdownOverlay";
-  overlay.className = "start-countdown-overlay hidden";
-  overlay.setAttribute("aria-live", "assertive");
-  overlay.innerHTML = `<strong id="startCountdownNumber">3</strong>`;
-  document.body.appendChild(overlay);
-  return overlay;
+  return ensurePreGameCountdownOverlay();
 }
 
 function clearStartCountdownTimer() {
@@ -1865,27 +1877,31 @@ function clearStartCountdownTimer() {
 
 function updateStartCountdownOverlay(countdown) {
   const overlay = ensureStartCountdownOverlay();
-  const numberElement = $("#startCountdownNumber");
+  const numberElement = $("#preGameCountdownNumber");
   clearStartCountdownTimer();
 
   if (!countdown || state.activeScreen !== "room") {
-    overlay.classList.add("hidden");
+    if (!preGameCountdownPromise) hidePreGameCountdownOverlay();
     lastStartCountdownNumber = null;
     return;
   }
 
   const remainingMs = Math.max(0, Number(countdown.endsAt || 0) - Date.now());
   const number = Math.max(1, Math.min(3, Math.ceil(remainingMs / 1000)));
-  if (numberElement) numberElement.textContent = String(number);
-  overlay.classList.remove("hidden");
 
   if (lastStartCountdownNumber !== number) {
     lastStartCountdownNumber = number;
-    playBellSound();
+    showPreGameCountdownNumber(number);
+  } else {
+    if (numberElement) numberElement.textContent = String(number);
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
   }
 
   if (remainingMs > 0) {
     startCountdownTimer = setTimeout(() => updateStartCountdownOverlay(countdown), 100);
+  } else {
+    preGameCountdownCompletedAt = Date.now();
   }
 }
 
@@ -2232,7 +2248,6 @@ function renderEmptyCardSpace() {
 
 function renderGame(game) {
   const previousRoomId = state.game?.roomId;
-  const previousScreen = state.activeScreen;
   state.game = game;
   state.room = null;
   if (previousRoomId !== game.roomId) {
@@ -2304,7 +2319,6 @@ function renderGame(game) {
   startTurnTimer(game);
   renderGameInfoPanel(game);
   updateMobileGameInfoPanel();
-  startGameEntryCountdown(game, previousScreen);
   updateMobileTouchHint(game);
   scheduleFlipAvailabilityRefresh(game);
   updateGameOverlay(game);
@@ -2938,6 +2952,9 @@ $("#roomAIDifficultySelect")?.addEventListener("change", (event) => {
   socket.emit("setAIDifficulty", { aiDifficulty: event.target.value });
 });
 $("#startGameButton").addEventListener("click", async () => {
+  if (startGameRequestPending || $("#startGameButton").disabled) return;
+  startGameRequestPending = true;
+  $("#startGameButton").disabled = true;
   await ensureAssetsReady();
   socket.emit("startGame");
 });
@@ -3074,12 +3091,22 @@ socket.on("roomState", (payload) => {
     closePasswordModal();
     closeCreateRoomModal();
   }
+  startGameRequestPending = false;
   renderRoom(payload);
 });
 
 socket.on("gameState", async (payload) => {
   if (!payload) return;
   await ensureAssetsReady();
+  if (shouldDelayGameScreenForPreGameCountdown(payload)) {
+    pendingPreGameState = payload;
+    await runPreGameCountdown();
+    const nextGameState = pendingPreGameState;
+    pendingPreGameState = null;
+    if (!nextGameState) return;
+    renderGame(nextGameState);
+    return;
+  }
   renderGame(payload);
 });
 
@@ -3089,6 +3116,7 @@ socket.on("roomPasswordError", (payload) => {
 });
 
 socket.on("errorMessage", (message) => {
+  startGameRequestPending = false;
   showToast(message);
   if (!$("#createRoomModal").classList.contains("hidden")) $("#createError").textContent = message;
 });

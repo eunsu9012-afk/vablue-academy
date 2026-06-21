@@ -818,21 +818,25 @@ body.is-game-screen #bellButton .bell-fallback {
   display: none;
 }
 
-body.is-game-screen #gameCountdownOverlay {
-  position: absolute;
+.pre-game-countdown-overlay {
+  position: fixed;
   inset: 0;
-  z-index: 12;
+  z-index: calc(var(--bb-z-modal) + 20);
   display: grid;
   place-items: center;
-  pointer-events: none;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.42), rgba(219, 236, 255, 0.18) 34%, transparent 62%);
+  pointer-events: auto;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.72), rgba(219, 236, 255, 0.48) 34%, rgba(193, 219, 255, 0.26) 62%, transparent 76%),
+    rgba(236, 245, 255, 0.66);
+  backdrop-filter: blur(2px);
 }
 
-body.is-game-screen #gameCountdownOverlay.hidden {
+.pre-game-countdown-overlay.hidden {
   display: none;
+  pointer-events: none;
 }
 
-body.is-game-screen #gameCountdownOverlay .game-countdown-number {
+.pre-game-countdown-number {
   display: grid;
   width: clamp(118px, 13vw, 172px);
   height: clamp(118px, 13vw, 172px);
@@ -851,7 +855,7 @@ body.is-game-screen #gameCountdownOverlay .game-countdown-number {
   text-shadow: 0 4px 0 rgba(255, 255, 255, 0.74), 0 0 26px rgba(255, 255, 255, 0.72);
 }
 
-body.is-game-screen #gameCountdownOverlay.is-pulse .game-countdown-number {
+.pre-game-countdown-overlay.is-pulse .pre-game-countdown-number {
   animation: game-countdown-pop 720ms cubic-bezier(0.18, 0.86, 0.26, 1) both;
 }
 
@@ -1503,7 +1507,7 @@ body.is-game-screen #mobileBoardStats {
     opacity: 0.48;
   }
 
-  body.is-game-screen #gameCountdownOverlay .game-countdown-number {
+  .pre-game-countdown-number {
     width: clamp(92px, 24vw, 118px);
     height: clamp(92px, 24vw, 118px);
     font-size: clamp(72px, 20vw, 100px);
