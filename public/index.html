@@ -302,32 +302,82 @@
           </div>
         </section>
 
-        <section id="roomScreen" class="screen hidden bb-screen screen-room" data-design-reference="게임 대기실 디자인.png">
-          <div class="room-layout">
-            <section class="panel bb-panel">
-              <div class="section-title-row">
-                <h2 id="roomTitle">방</h2>
-                <span id="roomCount" class="pill"></span>
+        <section id="roomScreen" class="screen hidden bb-screen screen-room room-screen" data-design-reference="게임 대기실 디자인.png">
+          <div class="room-page">
+            <header class="room-header">
+              <div class="room-title-area">
+                <p class="room-label">BabyBlue Academy</p>
+                <h2 id="roomTitle" class="room-title">방</h2>
+                <p id="roomSubtitle" class="room-subtitle">게임 시작 전 플레이어를 기다리는 중입니다.</p>
               </div>
-              <div id="roomPlayers" class="waiting-players"></div>
-            </section>
-            <aside class="panel bb-panel room-actions">
-              <h2>준비</h2>
-              <button id="readyButton" class="primary-button" type="button">준비</button>
-              <label class="room-ai-difficulty-row">
-                <span>AI 난이도</span>
-                <select id="roomAIDifficultySelect">
-                  <option value="beginner">초급</option>
-                  <option value="intermediate">중급</option>
-                  <option value="advanced">고급</option>
-                </select>
-              </label>
-              <button id="addAIButton" class="secondary-button" type="button">AI 추가</button>
-              <button id="removeAIButton" class="secondary-button" type="button">AI 제거</button>
-              <button id="startGameButton" class="primary-button" type="button">게임 시작</button>
-              <button id="roomLeaveButton" class="ghost-button" type="button">나가기</button>
-              <p id="roomHint" class="hint-text"></p>
-            </aside>
+              <div id="roomStatusSummary" class="room-status-summary" aria-label="방 상태 요약">
+                <span id="roomModePill" class="room-mode-pill room-status-pill">일반 모드</span>
+                <span id="roomPenaltyPill" class="room-penalty-pill room-status-pill">감점 1배</span>
+                <span id="roomPlayerCountPill" class="room-player-count-pill room-status-pill">1/6명</span>
+                <span id="roomLockPill" class="room-lock-pill room-status-pill">공개방</span>
+              </div>
+            </header>
+
+            <div class="room-layout">
+              <section class="room-main-panel bb-panel" aria-label="방 플레이어 슬롯">
+                <div class="room-main-heading">
+                  <div>
+                    <p class="room-label">Player Slots</p>
+                    <h3>참가자</h3>
+                  </div>
+                  <span id="roomCount" class="pill room-count-pill"></span>
+                </div>
+                <div id="roomPlayers" class="room-player-grid waiting-players"></div>
+              </section>
+
+              <aside class="room-side-panel" aria-label="방 설정과 액션">
+                <details class="room-settings-card bb-card room-mobile-collapsible-settings" open>
+                  <summary>방 정보</summary>
+                  <div id="roomSettingsGrid" class="room-detail-grid"></div>
+                </details>
+
+                <section class="room-ai-card bb-card">
+                  <div class="room-side-card-title">
+                    <div>
+                      <p class="room-label">AI Settings</p>
+                      <h3>AI 설정</h3>
+                    </div>
+                    <span id="roomAiSummary" class="room-mini-pill"></span>
+                  </div>
+                  <label class="room-ai-difficulty-row">
+                    <span>AI 난이도</span>
+                    <select id="roomAIDifficultySelect">
+                      <option value="beginner">초급</option>
+                      <option value="intermediate">중급</option>
+                      <option value="advanced">고급</option>
+                    </select>
+                  </label>
+                  <div class="room-ai-controls">
+                    <button id="addAIButton" class="secondary-button" type="button">AI 추가</button>
+                    <button id="removeAIButton" class="secondary-button" type="button">AI 제거</button>
+                  </div>
+                </section>
+
+                <section class="room-actions-card bb-card room-actions">
+                  <div class="room-side-card-title">
+                    <div>
+                      <p class="room-label">Ready</p>
+                      <h3>준비와 시작</h3>
+                    </div>
+                  </div>
+                  <button id="readyButton" class="primary-button" type="button">준비</button>
+                  <button id="startGameButton" class="primary-button" type="button">게임 시작</button>
+                  <button id="roomLeaveButton" class="ghost-button" type="button">나가기</button>
+                  <p id="roomHint" class="hint-text room-start-hint"></p>
+                </section>
+
+                <details class="room-guide-card bb-card room-mobile-collapsible-settings" open>
+                  <summary>안내</summary>
+                  <p>방장을 제외한 모든 플레이어가 준비하면 게임을 시작할 수 있습니다.</p>
+                  <p>AI는 닉네임으로만 구분되며, 난이도는 이 설정 패널에서만 표시됩니다.</p>
+                </details>
+              </aside>
+            </div>
           </div>
         </section>
 

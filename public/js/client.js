@@ -1822,6 +1822,108 @@ function updateStartCountdownOverlay(countdown) {
   }
 }
 
+function roomVisiblePlayers(room) {
+  return Array.isArray(room?.players) ? room.players.filter((player) => !player.spectator) : [];
+}
+
+function roomAiCount(room) {
+  return roomVisiblePlayers(room).filter((player) => isAiPlayer(player)).length;
+}
+
+function roomDisplayName(player) {
+  const name = displayName(player) || "참가자";
+  if (!isAiPlayer(player)) return name;
+  return /^AI\s+/i.test(name) ? name : `AI ${name}`;
+}
+
+function renderRoomDetailItem(label, value) {
+  return `
+    <div class="room-detail-item">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function renderRoomFanAvatar(player) {
+  return renderFanAvatar({ avatarId: player?.avatarId || DEFAULT_FAN_CHARACTER_ID }, "lg");
+}
+
+function renderRoomPlayerBadges(player, room) {
+  if (isAiPlayer(player)) return "";
+  const badges = [];
+  if (player?.isHost) badges.push(`<span class="room-slot-badge room-slot-badge-host">방장</span>`);
+  if (player?.id === room?.selfPlayerId) badges.push(`<span class="room-slot-badge room-slot-badge-self">나</span>`);
+  if (!player?.isHost) {
+    badges.push(`<span class="room-slot-badge ${player?.ready ? "room-slot-badge-ready" : "room-slot-badge-wait"}">${player?.ready ? "준비 완료" : "대기 중"}</span>`);
+  }
+  return badges.join("");
+}
+
+function renderRoomPlayerSlot(player, index, room) {
+  const isAI = isAiPlayer(player);
+  const nameClass = player?.isVaNickname ? "va-name" : "";
+  const badges = renderRoomPlayerBadges(player, room);
+  const avatarMarkup = isAI
+    ? `<span class="room-ai-mark" aria-hidden="true"></span>`
+    : renderRoomFanAvatar(player);
+  return `
+    <article class="room-player-slot waiting-player ${isAI ? "is-ai" : "is-human"} ${player?.isHost ? "is-host" : ""} ${player?.id === room?.selfPlayerId ? "is-self" : ""} ${player?.ready ? "is-ready" : ""}" data-slot-index="${index + 1}">
+      <div class="room-slot-corner">
+        <span>${String(index + 1).padStart(2, "0")}</span>
+      </div>
+      <div class="room-slot-avatar">${avatarMarkup}</div>
+      <div class="room-slot-copy">
+        <strong class="room-slot-name ${nameClass}">${escapeHtml(roomDisplayName(player))}</strong>
+        <span class="room-slot-subtitle">${isAI ? "자동 참가자" : "플레이어"}</span>
+      </div>
+      ${badges ? `<div class="room-slot-badges">${badges}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderEmptyRoomSlot(index) {
+  return `
+    <article class="room-player-slot waiting-player empty-slot" data-slot-index="${index + 1}">
+      <div class="room-slot-corner">
+        <span>${String(index + 1).padStart(2, "0")}</span>
+      </div>
+      <div class="room-slot-avatar">
+        <span class="room-empty-mark" aria-hidden="true"></span>
+      </div>
+      <div class="room-slot-copy">
+        <strong class="room-slot-name">빈 자리</strong>
+        <span class="room-slot-subtitle">대기 중</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRoomSettings(room) {
+  const settingsGrid = $("#roomSettingsGrid");
+  if (!settingsGrid) return;
+  settingsGrid.innerHTML = [
+    renderRoomDetailItem("게임 모드", `${modeLabel(room.mode)} 모드`),
+    renderRoomDetailItem("감점 배수", penaltyLabel(room.penaltyMultiplier)),
+    renderRoomDetailItem("턴 제한", `${Number(room.turnTime || 0)}초`),
+    renderRoomDetailItem("최대 인원", `${Number(room.maxPlayers || 6)}명`),
+    renderRoomDetailItem("비밀번호", room.hasPassword ? "사용" : "없음"),
+    renderRoomDetailItem("방 상태", roomStatusLabel(room.status)),
+  ].join("");
+}
+
+function updateRoomSummary(room) {
+  const players = roomVisiblePlayers(room);
+  const countText = `${players.length}/${room.maxPlayers}명`;
+  setText("#roomSubtitle", room.status === "countdown" ? "곧 게임이 시작됩니다." : "게임 시작 전 플레이어를 기다리는 중입니다.");
+  setText("#roomCount", `${countText} 참가`);
+  setText("#roomModePill", `${modeLabel(room.mode)} 모드`);
+  setText("#roomPenaltyPill", `감점 ${penaltyLabel(room.penaltyMultiplier)}`);
+  setText("#roomPlayerCountPill", countText);
+  setText("#roomLockPill", room.hasPassword ? "비밀번호방" : "공개방");
+  setText("#roomAiSummary", room.aiMode === "playersOnly" ? "플레이어만" : `${roomAiCount(room)}명 · ${aiDifficultyLabel(room.aiDifficulty)}`);
+}
+
 function renderRoom(room) {
   if (!room) {
     state.room = null;
@@ -1847,14 +1949,16 @@ function renderRoom(room) {
   victoryPlayedForResult = false;
   showScreen("room");
   setText("#roomTitle", room.title);
-  setText("#roomCount", `[${modeLabel(room.mode)}] [${penaltyLabel(room.penaltyMultiplier)}] [${roomAIInfoLabel(room)}] ${room.players.length}/${room.maxPlayers}`);
+  updateRoomSummary(room);
+  renderRoomSettings(room);
   updateStartCountdownOverlay(room.countdown || null);
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
   const isHost = self?.id === room.hostId;
   const isCountdown = Boolean(room.countdown) || room.status === "countdown";
   const isPlayersOnly = room.aiMode === "playersOnly";
-  const humanPlayers = room.players.filter((player) => !player.isAI);
+  const visiblePlayers = roomVisiblePlayers(room);
+  const humanPlayers = visiblePlayers.filter((player) => !player.isAI);
   const nonHostHumans = humanPlayers.filter((player) => player.id !== room.hostId);
   const allNonHostHumansReady = nonHostHumans.length > 0 && nonHostHumans.every((player) => player.ready);
   const aiDifficultySelect = $("#roomAIDifficultySelect");
@@ -1864,32 +1968,12 @@ function renderRoom(room) {
     aiDifficultySelect.closest(".room-ai-difficulty-row")?.classList.toggle("hidden", !isHost || isPlayersOnly);
   }
   const playerList = $("#roomPlayers");
-  playerList.innerHTML = "";
-
-  for (const player of room.players) {
-    const item = document.createElement("article");
-    item.className = "waiting-player";
-    item.innerHTML = `
-      <h3>${renderName(player)} ${renderHostBadge(player)}</h3>
-      <div class="badge-row">
-        ${player.isHost ? `<span class="badge host">방장</span>` : ""}
-        ${player.isAI ? `<span class="badge ai">[AI]</span>` : ""}
-        ${player.isAI ? `<span class="badge ai-difficulty-badge">AI ${aiDifficultyLabel(room.aiDifficulty)}</span>` : ""}
-        ${player.isAI || player.isHost ? "" : `<span class="badge ${player.ready ? "ready" : "not-ready"}">${player.ready ? "[준비]" : "[미준비]"}</span>`}
-      </div>
-    `;
-    playerList.appendChild(item);
-  }
-  for (let index = room.players.length; index < 6; index += 1) {
-    const item = document.createElement("article");
-    item.className = "waiting-player empty-slot";
-    item.innerHTML = `
-      <h3>빈 자리</h3>
-      <div class="badge-row">
-        <span class="badge not-ready">대기</span>
-      </div>
-    `;
-    playerList.appendChild(item);
+  if (playerList) {
+    const maxSlots = Math.max(6, Number(room.maxPlayers || 6));
+    playerList.innerHTML = Array.from({ length: maxSlots }, (_, index) => {
+      const player = visiblePlayers[index];
+      return player ? renderRoomPlayerSlot(player, index, room) : renderEmptyRoomSlot(index);
+    }).join("");
   }
 
   $("#readyButton").textContent = self?.ready ? "준비 취소" : "준비";
@@ -1898,7 +1982,7 @@ function renderRoom(room) {
   $("#addAIButton").classList.toggle("hidden", !isHost || isPlayersOnly);
   $("#removeAIButton").classList.toggle("hidden", !isHost || isPlayersOnly);
   $("#startGameButton").classList.toggle("hidden", !isHost);
-  $("#addAIButton").disabled = !isHost || isPlayersOnly || room.status !== "waiting" || isCountdown || room.players.length >= room.maxPlayers || allNonHostHumansReady;
+  $("#addAIButton").disabled = !isHost || isPlayersOnly || room.status !== "waiting" || isCountdown || visiblePlayers.length >= room.maxPlayers || allNonHostHumansReady;
   $("#removeAIButton").disabled = !isHost || isPlayersOnly || isCountdown || !room.players.some((player) => player.isAI);
   $("#startGameButton").disabled = !isHost || !room.canStart || !state.assetsReady || isCountdown;
   $("#roomHint").textContent = isCountdown
