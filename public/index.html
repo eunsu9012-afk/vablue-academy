@@ -84,7 +84,6 @@
                     <p class="preview-kicker">선택한 캐릭터</p>
                     <span id="selectedFanCharacterAvatar" class="selected-character-avatar" data-avatar-initial="짱"></span>
                     <strong id="selectedFanCharacterName">짱돌이</strong>
-                    <span id="selectedFanCharacterDescription">든든하게 함께하는 팬 캐릭터예요.</span>
                   </aside>
                 </div>
 
@@ -103,90 +102,139 @@
           </div>
         </section>
 
-        <section id="lobbyScreen" class="screen hidden bb-screen screen-lobby" data-design-reference="대기실 디자인.png">
-          <div class="lobby-grid">
-            <section class="panel bb-panel guide-panel">
-              <button id="guideToggleButton" class="guide-title-toggle" type="button" aria-expanded="true">게임 설명 ▲</button>
-              <div id="guideBody" class="guide-body">
-                <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼</button>
-                <div class="guide-list">
-                  <article class="guide-item">
-                    <span class="guide-icon">🎮</span>
-                    <div>
-                      <strong>게임 인원</strong>
-                      <span>1~6인 플레이 가능</span>
-                      <span>AI 추가 가능</span>
-                      <small>총 2명 이상부터 시작</small>
-                    </div>
-                  </article>
-                  <article class="guide-item">
-                    <span class="guide-icon">⭐</span>
-                    <div>
-                      <strong>점수제 방식</strong>
-                      <span>카드 수가 아니라</span>
-                      <span>점수로 승부합니다</span>
-                    </div>
-                  </article>
-                  <article class="guide-item">
-                    <span class="guide-icon">🃏</span>
-                    <div>
-                      <strong>카드 넘기기</strong>
-                      <span>카드 덱을</span>
-                      <span>마우스 왼쪽 클릭</span>
-                    </div>
-                  </article>
-                  <article class="guide-item">
-                    <span class="guide-icon">🔔</span>
-                    <div>
-                      <strong>종 치기</strong>
-                      <span>전체 테이블에서</span>
-                      <span>같은 캐릭터가 5개가 되면</span>
-                      <span>스페이스바로 종을 치세요</span>
-                    </div>
-                  </article>
-                  <article class="guide-item">
-                    <span class="guide-icon">🔥</span>
-                    <div>
-                      <strong>게임 모드</strong>
-                      <span>일반 모드: 한 카드에 한 캐릭터</span>
-                      <span>하드 모드: 한 카드에 여러 캐릭터</span>
-                    </div>
-                  </article>
+        <section id="lobbyScreen" class="screen hidden bb-screen screen-lobby lobby-screen" data-design-reference="대기실 디자인.png">
+          <div class="lobby-page">
+            <header class="lobby-header-panel">
+              <div class="lobby-brand-block">
+                <span class="lobby-logo" aria-hidden="true">
+                  <img src="/assets/bell/bell.png" alt="" />
+                </span>
+                <div class="lobby-title-copy">
+                  <p class="lobby-eyebrow">BabyBlue Academy</p>
+                  <h1>베이블루 할리갈리 온라인</h1>
+                  <p>함께 즐기는 손끝의 두뇌 스포츠!</p>
                 </div>
               </div>
-            </section>
-
-            <section class="panel bb-panel room-list-panel">
-              <div class="section-title-row">
-                <h2>게임방 목록</h2>
-                <span id="onlineCount" class="pill">0명 접속</span>
+              <div class="lobby-summary-grid" aria-label="로비 요약">
+                <article class="lobby-summary-card">
+                  <span class="summary-icon" aria-hidden="true">👥</span>
+                  <span>접속자 현황</span>
+                  <strong id="onlineCount">0명</strong>
+                </article>
+                <article class="lobby-summary-card lobby-profile-card">
+                  <span id="lobbyCurrentUserAvatar" class="lobby-current-avatar" aria-hidden="true"></span>
+                  <span>내 정보</span>
+                  <strong id="lobbyCurrentUserName">-</strong>
+                </article>
+                <article class="lobby-summary-card lobby-stats-card">
+                  <span class="summary-icon" aria-hidden="true">🏆</span>
+                  <span>내 전적</span>
+                  <div id="myStats" class="stats-grid"></div>
+                </article>
+                <article class="lobby-summary-card">
+                  <span class="summary-icon" aria-hidden="true">📡</span>
+                  <span>현재 방</span>
+                  <strong id="lobbyRoomCount">0개</strong>
+                </article>
               </div>
-              <div id="roomList" class="room-list"></div>
-            </section>
+            </header>
 
-            <section id="onlineUsersPanel" class="panel bb-panel online-users-panel">
-              <div class="section-title-row">
-                <h2>현재 접속 유저</h2>
-                <button id="onlineUsersToggleButton" class="mini-button" type="button">현재 접속 유저 ▼</button>
-                <button id="refreshUsersButton" class="mini-button" type="button">새로고침</button>
-              </div>
-              <div id="onlineUsersList" class="online-users-list"></div>
-            </section>
+            <div class="lobby-content">
+              <section class="panel bb-panel room-list-panel lobby-main-panel" aria-labelledby="lobbyRoomListTitle">
+                <div class="lobby-panel-heading">
+                  <div>
+                    <p class="lobby-eyebrow">Room List</p>
+                    <h2 id="lobbyRoomListTitle">게임 방 목록</h2>
+                  </div>
+                  <div class="lobby-main-actions">
+                    <button id="refreshLobbyButton" class="icon-button lobby-refresh-button" type="button" aria-label="방 목록 새로고침">↻</button>
+                    <button id="openCreateRoomButton" class="primary-button create-room-trigger" type="button">방 만들기 +</button>
+                  </div>
+                </div>
 
-            <aside class="lobby-side">
-              <section class="panel bb-panel compact-panel">
-                <h2>내 전적</h2>
-                <div id="myStats" class="stats-grid"></div>
-                <button id="openCreateRoomButton" class="primary-button create-room-trigger" type="button">방 만들기</button>
+                <div class="lobby-toolbar" aria-label="방 목록 필터">
+                  <label class="lobby-filter-field">
+                    <span>모드</span>
+                    <select id="lobbyModeFilter">
+                      <option value="all">전체 모드</option>
+                      <option value="normal">일반</option>
+                      <option value="hard">하드</option>
+                    </select>
+                  </label>
+                  <label class="lobby-filter-field">
+                    <span>상태</span>
+                    <select id="lobbyStatusFilter">
+                      <option value="all">전체 상태</option>
+                      <option value="waiting">대기중</option>
+                      <option value="playing">게임중</option>
+                      <option value="full">풀방</option>
+                    </select>
+                  </label>
+                  <label class="lobby-search-field">
+                    <span>검색</span>
+                    <input id="lobbyRoomSearchInput" type="search" maxlength="20" autocomplete="off" placeholder="방 제목 검색" />
+                  </label>
+                </div>
+
+                <div class="lobby-room-table-head" aria-hidden="true">
+                  <span>번호</span>
+                  <span>방 제목</span>
+                  <span>모드</span>
+                  <span>인원</span>
+                  <span>상태</span>
+                </div>
+                <div id="roomList" class="room-list lobby-room-list"></div>
+                <div class="lobby-list-footer">
+                  <span id="lobbyVisibleRoomCount">0개 표시</span>
+                  <span>방 목록은 자동으로 갱신됩니다.</span>
+                </div>
               </section>
 
-              <section class="panel bb-panel ranking-panel">
-                <h2>서버 최다승 TOP3</h2>
-                <ol id="topWinsList" class="top-list"></ol>
-                <h2>서버 최고승률 TOP3</h2>
-                <ol id="topWinRatesList" class="top-list"></ol>
-              </section>
-            </aside>
+              <aside class="lobby-side-panel">
+                <section id="lobbyRankingPanel" class="panel bb-panel ranking-panel lobby-info-card" aria-labelledby="lobbyTopRankTitle">
+                  <div class="lobby-card-heading">
+                    <h2 id="lobbyTopRankTitle">서버 TOP3</h2>
+                    <button id="rankingToggleButton" class="mini-button" type="button" aria-expanded="false">펼치기</button>
+                  </div>
+                  <div class="lobby-rank-columns">
+                    <div>
+                      <h3>최다승</h3>
+                      <ol id="topWinsList" class="top-list"></ol>
+                    </div>
+                    <div>
+                      <h3>승률</h3>
+                      <ol id="topWinRatesList" class="top-list"></ol>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="onlineUsersPanel" class="panel bb-panel online-users-panel lobby-info-card">
+                  <div class="lobby-card-heading">
+                    <h2>현재 접속 유저</h2>
+                    <div class="lobby-card-actions">
+                      <button id="refreshUsersButton" class="mini-button" type="button">새로고침</button>
+                      <button id="onlineUsersToggleButton" class="mini-button" type="button" aria-expanded="false">펼치기</button>
+                    </div>
+                  </div>
+                  <div id="onlineUsersList" class="online-users-list"></div>
+                </section>
+
+                <section class="panel bb-panel guide-panel lobby-info-card">
+                  <div class="lobby-card-heading">
+                    <h2>공지사항</h2>
+                    <button id="guideToggleButton" class="mini-button guide-title-toggle" type="button" aria-expanded="true">접기</button>
+                  </div>
+                  <div id="guideBody" class="guide-body">
+                    <ul class="lobby-notice-list">
+                      <li>같은 캐릭터가 전체 공개 카드에서 5개가 되면 종을 치세요.</li>
+                      <li>하드 모드는 한 카드에 여러 캐릭터가 함께 등장합니다.</li>
+                      <li>점수제로 진행되며, 마지막까지 살아남은 플레이어가 승리합니다.</li>
+                    </ul>
+                    <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼</button>
+                  </div>
+                </section>
+              </aside>
+            </div>
           </div>
         </section>
 

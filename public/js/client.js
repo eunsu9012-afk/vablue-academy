@@ -10,12 +10,12 @@ const CHARACTER_ASSETS = {
 };
 
 const FAN_CHARACTERS = [
-  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png", description: "든든하게 함께하는 팬 캐릭터예요." },
-  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png", description: "밝고 씩씩하게 응원해 주는 친구예요." },
-  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png", description: "조용하지만 존재감 있는 매력 담당이에요." },
-  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png", description: "상큼하고 통통 튀는 에너지를 가졌어요." },
-  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png", description: "다정하게 곁을 지키는 팬 캐릭터예요." },
-  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png", description: "작고 귀여운 장난기를 품고 있어요." },
+  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
+  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
+  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
+  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
+  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
 const FAN_CHARACTER_ALIASES = new Map([
@@ -99,6 +99,7 @@ const state = {
   passwordRoomId: null,
   gameResult: null,
   onlineUsersExpanded: false,
+  lobbyRankingExpanded: false,
   mobileGameInfoExpanded: false,
   mobileInfoRoomId: null,
   spectatorOverlayDismissedFor: null,
@@ -355,6 +356,7 @@ function scheduleFlipAvailabilityRefresh(game = state.game) {
 function updateMobileMode() {
   document.body.classList.toggle("is-mobile", isMobileMode());
   ensureMobileLobbyAccordions();
+  updateLobbyRankingPanelState();
   updateMobileGameInfoPanel();
   updateMobileTouchHint();
 }
@@ -390,6 +392,7 @@ function setupMobileLobbySection(panel, label, expandedByDefault = true) {
 
 function ensureMobileLobbyAccordions() {
   if (!screens.lobby) return;
+  if (screens.lobby.querySelector(".lobby-page")) return;
   setupMobileLobbySection(screens.lobby.querySelector(".room-list-panel"), "게임방 목록", true);
   setupMobileLobbySection(screens.lobby.querySelector(".compact-panel"), "내 전적", true);
   setupMobileLobbySection(screens.lobby.querySelector(".ranking-panel"), "서버 TOP3", false);
@@ -646,7 +649,6 @@ function updateSelectedFanCharacterPreview() {
     attachFanImageFallback(avatar.querySelector("img"));
   }
   setText("#selectedFanCharacterName", character.name);
-  setText("#selectedFanCharacterDescription", character.description || "");
 }
 
 function renderFanCharacterPicker() {
@@ -1018,7 +1020,7 @@ function applyLobbyGuideCollapsed(collapsed) {
   const body = $("#guideBody");
   if (!button || !body) return;
   body.classList.toggle("hidden", collapsed);
-  button.textContent = collapsed ? "게임 설명 ▼" : "게임 설명 ▲";
+  button.textContent = collapsed ? "펼치기" : "접기";
   button.setAttribute("aria-expanded", String(!collapsed));
   localStorage.setItem(LOBBY_GUIDE_COLLAPSED_KEY, String(collapsed));
 }
@@ -1066,7 +1068,7 @@ function showUserContextMenu(user, x, y) {
   const menu = $("#userContextMenu");
   const joinDisabled = user.status !== "waiting";
   menu.innerHTML = `
-    <div class="context-title">${renderName(user)}</div>
+    <div class="context-title">${renderName(user, { hideAiBadge: true })}</div>
     <div class="context-status status-${escapeHtml(user.status)}">${STATUS_ICONS[user.status] || "•"} [${escapeHtml(user.statusLabel)}]</div>
     <button class="context-item join-user ${joinDisabled ? "is-disabled" : ""}" type="button" data-disabled="${joinDisabled}">같이하기</button>
     <button class="context-item hide-user" type="button">숨기기</button>
@@ -1109,63 +1111,151 @@ function showHiddenUsersMenu(x, y) {
 function renderRankList(selector, rows, mode) {
   const list = $(selector);
   if (!rows?.length) {
-    list.innerHTML = "<li>아직 기록이 없습니다</li>";
+    list.innerHTML = `<li class="lobby-empty-row">아직 기록이 없습니다</li>`;
     return;
   }
-  list.innerHTML = rows.map((row) => {
+  list.innerHTML = rows.slice(0, 3).map((row, index) => {
     const value = mode === "rate" ? `${formatWinRate(row.winRate)} · ${row.wins}승` : `${row.wins}승`;
-    return `<li>${renderName(row)} <strong>${value}</strong></li>`;
+    return `
+      <li>
+        <span class="rank-number">${index + 1}</span>
+        <span class="rank-user">${renderName(row, { hideAiBadge: true })}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </li>
+    `;
   }).join("");
+}
+
+function getLobbyRoomStatus(room) {
+  if (room.status === "countdown") return "countdown";
+  if (room.status === "waiting" && Number(room.currentPlayers || 0) >= Number(room.maxPlayers || 0)) return "full";
+  if (room.status === "waiting") return "waiting";
+  return "playing";
+}
+
+function getLobbyRoomStatusLabel(room) {
+  const status = getLobbyRoomStatus(room);
+  if (status === "countdown") return "시작 중";
+  if (status === "full") return "풀방";
+  if (status === "waiting") return "대기중";
+  return "게임중";
+}
+
+function getLobbyRoomFilters() {
+  return {
+    query: ($("#lobbyRoomSearchInput")?.value || "").trim().toLowerCase(),
+    mode: $("#lobbyModeFilter")?.value || "all",
+    status: $("#lobbyStatusFilter")?.value || "all",
+  };
+}
+
+function matchesLobbyRoomFilters(room, filters) {
+  if (filters.mode !== "all" && room.mode !== filters.mode) return false;
+  if (filters.status !== "all" && getLobbyRoomStatus(room) !== filters.status) return false;
+  if (filters.query && !String(room.title || "").toLowerCase().includes(filters.query)) return false;
+  return true;
+}
+
+function renderLobbyRoomCard(room, displayIndex) {
+  const status = getLobbyRoomStatus(room);
+  const statusLabel = getLobbyRoomStatusLabel(room);
+  const canJoin = status === "waiting";
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = `room-card lobby-room-card status-${status}`;
+  card.dataset.roomStatus = status;
+  card.disabled = !canJoin;
+  card.innerHTML = `
+    <span class="room-number">${String(displayIndex + 1).padStart(3, "0")}</span>
+    <span class="room-title-block">
+      <strong>${escapeHtml(room.title)}</strong>
+      <span>${room.hasPassword ? "비밀번호 방" : "공개 방"} · ${escapeHtml(roomAIInfoLabel(room))}</span>
+    </span>
+    <span class="room-badge-group">
+      <span class="badge mode-badge">${modeLabel(room.mode)}</span>
+      <span class="badge penalty-badge">${penaltyLabel(room.penaltyMultiplier)}</span>
+      ${room.hasPassword ? `<span class="badge private-room-badge">비공개</span>` : ""}
+    </span>
+    <span class="room-player-count">${Number(room.currentPlayers || 0)}/${Number(room.maxPlayers || 0)}</span>
+    <span class="room-status-pill status-${status}">${escapeHtml(statusLabel)}</span>
+    <span class="room-enter-label">${canJoin ? "입장" : statusLabel}</span>
+  `;
+  card.addEventListener("click", () => {
+    if (!canJoin) return;
+    if (room.hasPassword) openPasswordModal(room.id, "비밀번호방입니다.\n비밀번호를 입력해 주세요.");
+    else socket.emit("joinRoom", { roomId: room.id });
+  });
+  return card;
+}
+
+function renderLobbyEmptyState(message) {
+  return `
+    <div class="room-card empty-room-card lobby-empty-state">
+      <strong>열린 방이 없어요</strong>
+      <p>${escapeHtml(message)}</p>
+    </div>
+  `;
 }
 
 function renderLobby() {
   const lobby = state.lobby;
   if (!lobby) return;
-  setText("#onlineCount", `${lobby.onlineCount}명 접속`);
+  const rooms = Array.isArray(lobby.rooms) ? lobby.rooms : [];
+  setText("#onlineCount", `${Number(lobby.onlineCount || 0)}명`);
+  setText("#lobbyRoomCount", `${rooms.length}개`);
+
+  const currentUser = lobby.currentUser || { nickname: state.nickname, avatarId: state.fanCharacterId };
+  setText("#lobbyCurrentUserName", displayName(currentUser) || state.nickname || "-");
+  const avatarHolder = $("#lobbyCurrentUserAvatar");
+  if (avatarHolder) avatarHolder.innerHTML = renderFanAvatar(currentUser, "lg");
 
   const stats = lobby.myStats || { wins: 0, losses: 0, winRate: 0 };
   $("#myStats").innerHTML = `
-    <div class="stat-box"><span>내 승</span><strong>${stats.wins}</strong></div>
-    <div class="stat-box"><span>내 패</span><strong>${stats.losses}</strong></div>
+    <div class="stat-box"><span>승</span><strong>${stats.wins}</strong></div>
+    <div class="stat-box"><span>패</span><strong>${stats.losses}</strong></div>
     <div class="stat-box"><span>승률</span><strong>${formatWinRate(stats.winRate)}</strong></div>
   `;
 
   renderRankList("#topWinsList", lobby.topWins || lobby.top3 || [], "wins");
   renderRankList("#topWinRatesList", lobby.topWinRates || [], "rate");
+  updateLobbyRankingPanelState();
 
   const roomList = $("#roomList");
-  if (!lobby.rooms.length) {
-    roomList.innerHTML = `<div class="room-card empty-room-card"><h3>열린 방 없음</h3><p class="hint-text">방 만들기 버튼으로 새 방을 만들어 주세요.</p></div>`;
+  const filters = getLobbyRoomFilters();
+  const visibleRooms = rooms.filter((room) => matchesLobbyRoomFilters(room, filters));
+  setText("#lobbyVisibleRoomCount", `${visibleRooms.length}/${rooms.length}개 표시`);
+  if (!rooms.length) {
+    roomList.innerHTML = renderLobbyEmptyState("아직 열린 방이 없어요. 새 방을 만들어 보세요.");
+    renderOnlineUsers();
+    return;
+  }
+  if (!visibleRooms.length) {
+    roomList.innerHTML = renderLobbyEmptyState("조건에 맞는 방이 없어요. 필터를 바꿔 보세요.");
     renderOnlineUsers();
     return;
   }
 
   roomList.innerHTML = "";
-  for (const room of lobby.rooms) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = `room-card ${room.status !== "waiting" ? "in-progress" : ""}`;
-    card.disabled = room.status !== "waiting";
-    card.innerHTML = `
-      <h3>${escapeHtml(room.title)}</h3>
-      <div class="room-meta">
-        <span class="pill">${room.currentPlayers}/${room.maxPlayers}</span>
-        <span class="badge mode-badge">[${modeLabel(room.mode)}]</span>
-        <span class="badge penalty-badge">[${penaltyLabel(room.penaltyMultiplier)}]</span>
-        <span class="badge ai-difficulty-badge">[${roomAIInfoLabel(room)}]</span>
-        ${room.hasPassword ? `<span class="badge">비번</span>` : ""}
-        <span class="badge">${roomStatusLabel(room.status)}</span>
-      </div>
-      <span class="hint-text">${room.status === "waiting" ? "클릭해서 입장" : roomStatusLabel(room.status)}</span>
-    `;
-    card.addEventListener("click", () => {
-      if (room.status !== "waiting") return;
-      if (room.hasPassword) openPasswordModal(room.id, "비밀번호방입니다.\n비밀번호를 입력해 주세요.");
-      else socket.emit("joinRoom", { roomId: room.id });
-    });
-    roomList.appendChild(card);
-  }
+  visibleRooms.forEach((room, index) => {
+    roomList.appendChild(renderLobbyRoomCard(room, index));
+  });
   renderOnlineUsers();
+}
+
+function renderOnlineUserRow(user) {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = `online-user status-${escapeHtml(user.status)}`;
+  item.innerHTML = `
+    <span class="status-dot" aria-hidden="true"></span>
+    <span class="online-user-name">${renderName(user, { hideAiBadge: true })}</span>
+    <span class="user-status-pill status-${escapeHtml(user.status)}">${escapeHtml(user.statusLabel)}</span>
+  `;
+  item.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    showUserContextMenu(user, event.clientX, event.clientY);
+  });
+  return item;
 }
 
 function renderOnlineUsers() {
@@ -1175,25 +1265,13 @@ function renderOnlineUsers() {
   const hiddenUsers = getHiddenUsers();
   const users = (state.lobby.onlineUsers || []).filter((user) => !hiddenUsers.has(user.nickname));
   if (!users.length) {
-    list.innerHTML = `<p class="hint-text">표시할 유저가 없습니다.</p>`;
+    list.innerHTML = `<p class="hint-text lobby-empty-inline">표시할 유저가 없습니다.</p>`;
     return;
   }
 
   list.innerHTML = "";
   for (const user of users) {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = `online-user status-${user.status}`;
-    item.innerHTML = `
-      <span class="status-dot" aria-hidden="true">${STATUS_ICONS[user.status] || "•"}</span>
-      <span class="online-user-name">${renderName(user)}</span>
-      <span class="badge">[${escapeHtml(user.statusLabel)}]</span>
-    `;
-    item.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      showUserContextMenu(user, event.clientX, event.clientY);
-    });
-    list.appendChild(item);
+    list.appendChild(renderOnlineUserRow(user));
   }
 }
 
@@ -1201,13 +1279,23 @@ function updateOnlineUsersPanelState() {
   const panel = $("#onlineUsersPanel");
   const toggle = $("#onlineUsersToggleButton");
   if (!panel || !toggle) return;
-  panel.classList.toggle("collapsed", !state.onlineUsersExpanded);
+  const collapsed = isMobileMode() && !state.onlineUsersExpanded;
+  panel.classList.toggle("collapsed", collapsed);
   const count = Number(state.lobby?.onlineCount || 0);
   const heading = panel.querySelector("h2");
   if (heading) heading.textContent = `현재 접속 유저(${count})`;
-  toggle.textContent = state.onlineUsersExpanded
-    ? `현재 접속 유저(${count}) ▲`
-    : `현재 접속 유저(${count}) ▼`;
+  toggle.textContent = collapsed ? "펼치기" : "접기";
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function updateLobbyRankingPanelState() {
+  const panel = $("#lobbyRankingPanel");
+  const toggle = $("#rankingToggleButton");
+  if (!panel || !toggle) return;
+  const collapsed = isMobileMode() && !state.lobbyRankingExpanded;
+  panel.classList.toggle("collapsed", collapsed);
+  toggle.textContent = collapsed ? "펼치기" : "접기";
+  toggle.setAttribute("aria-expanded", String(!collapsed));
 }
 
 function getTutorialStep() {
@@ -2388,12 +2476,22 @@ $("#gameInfoToggleButton")?.addEventListener("click", () => {
   state.mobileGameInfoExpanded = !state.mobileGameInfoExpanded;
   updateMobileGameInfoPanel();
 });
+$("#refreshLobbyButton")?.addEventListener("click", () => socket.emit("refreshLobby"));
+$("#lobbyRoomSearchInput")?.addEventListener("input", renderLobby);
+$("#lobbyModeFilter")?.addEventListener("change", renderLobby);
+$("#lobbyStatusFilter")?.addEventListener("change", renderLobby);
 $("#refreshUsersButton").addEventListener("click", () => socket.emit("refreshLobby"));
 $("#onlineUsersToggleButton").addEventListener("click", (event) => {
   event.stopPropagation();
   closeSettingsPanel();
   state.onlineUsersExpanded = !state.onlineUsersExpanded;
   updateOnlineUsersPanelState();
+});
+$("#rankingToggleButton")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  closeSettingsPanel();
+  state.lobbyRankingExpanded = !state.lobbyRankingExpanded;
+  updateLobbyRankingPanelState();
 });
 
 $("#settingsButton").addEventListener("click", (event) => {

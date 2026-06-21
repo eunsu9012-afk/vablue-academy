@@ -256,7 +256,7 @@ body.is-nickname-screen .topbar {
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(30, 107, 255, 0.3);
@@ -265,7 +265,7 @@ body.is-nickname-screen .topbar {
     radial-gradient(circle at 50% 18%, rgba(255, 244, 199, 0.75), transparent 48%),
     linear-gradient(180deg, #ffffff, #eef6ff);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 14px 30px rgba(35, 83, 160, 0.12);
-  padding: clamp(16px, 2vw, 22px);
+  padding: clamp(14px, 1.8vw, 20px);
   text-align: center;
 }
 
@@ -304,14 +304,6 @@ body.is-nickname-screen .topbar {
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.selected-character-preview span:last-child {
-  max-width: 230px;
-  color: var(--bb-text-sub);
-  font-size: 13px;
-  font-weight: 750;
-  line-height: 1.45;
 }
 
 .fan-character-field {
@@ -537,7 +529,7 @@ body.is-nickname-screen .topbar {
   }
 
   .selected-character-preview {
-    gap: 6px;
+    gap: 8px;
     border-radius: 18px;
     padding: 12px;
   }
@@ -555,11 +547,6 @@ body.is-nickname-screen .topbar {
 
   .selected-character-preview strong {
     font-size: 18px;
-  }
-
-  .selected-character-preview span:last-child {
-    font-size: 12px;
-    line-height: 1.34;
   }
 
   .fan-character-field legend {
@@ -693,6 +680,7 @@ body.is-nickname-screen .topbar {
 
   .selected-character-preview {
     grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
     justify-items: start;
     align-content: center;
     column-gap: 12px;
@@ -704,10 +692,11 @@ body.is-nickname-screen .topbar {
 
   .preview-kicker {
     grid-column: 2;
+    align-self: end;
   }
 
   .selected-character-avatar {
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 2;
     width: 72px;
     height: 72px;
     border-radius: 22px;
@@ -720,15 +709,9 @@ body.is-nickname-screen .topbar {
 
   .selected-character-preview strong {
     grid-column: 2;
+    align-self: start;
     width: 100%;
     font-size: 18px;
-  }
-
-  .selected-character-preview span:last-child {
-    grid-column: 2;
-    max-width: 100%;
-    font-size: 12px;
-    line-height: 1.32;
   }
 
   .fan-character-field legend {
