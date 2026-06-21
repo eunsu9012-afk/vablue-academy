@@ -46,24 +46,61 @@
 
       <main>
         <section id="nicknameScreen" class="screen nickname-screen bb-screen screen-nickname" data-design-reference="닉네임 디자인.png">
-          <form id="nicknameForm" class="entry-panel">
-            <div class="tiny-deco">✦ ♡ ✿</div>
-            <h1>닉네임 입력</h1>
-            <p id="nicknameError" class="error-text"></p>
-            <label class="nickname-input-row">
-              <span>닉네임</span>
-              <input id="nicknameInput" class="glow-input" type="text" maxlength="6" autocomplete="off" placeholder="닉네임을 입력하세요" />
-            </label>
-            <p class="input-help">6자내 한글,영어 포함</p>
-            <fieldset class="fan-character-field">
-              <legend>캐릭터 선택</legend>
-              <div id="fanCharacterGrid" class="fan-character-grid" role="radiogroup" aria-label="팬 캐릭터 선택"></div>
-            </fieldset>
-            <div class="entry-actions">
-              <button id="randomProfileButton" class="secondary-button" type="button">랜덤</button>
-              <button class="primary-button" type="submit">대기실 입장</button>
-            </div>
-          </form>
+          <div class="nickname-page">
+            <form id="nicknameForm" class="entry-panel nickname-shell" autocomplete="off">
+              <header class="nickname-brand-area">
+                <span class="nickname-logo" aria-hidden="true">
+                  <img src="/assets/bell/bell.png" alt="" />
+                </span>
+                <div class="nickname-brand-copy">
+                  <p class="nickname-eyebrow">BabyBlue Academy</p>
+                  <h1>베이블루 할리갈리 온라인</h1>
+                  <p>닉네임과 팬 캐릭터를 고르고 게임 대기실로 입장하세요.</p>
+                </div>
+              </header>
+
+              <section class="nickname-card-panel" aria-labelledby="nicknameSetupTitle">
+                <div class="nickname-panel-heading">
+                  <span class="nickname-panel-icon" aria-hidden="true">✦</span>
+                  <div>
+                    <p class="nickname-step-label">Profile Setup</p>
+                    <h2 id="nicknameSetupTitle">닉네임 설정</h2>
+                  </div>
+                </div>
+
+                <p id="nicknameError" class="error-text" aria-live="polite"></p>
+
+                <div class="nickname-content-grid">
+                  <div class="nickname-input-panel">
+                    <label class="nickname-input-row">
+                      <span>닉네임</span>
+                      <input id="nicknameInput" class="glow-input" type="text" maxlength="6" autocomplete="off" placeholder="닉네임을 입력하세요" />
+                    </label>
+                    <p class="input-help">1~6자까지 사용할 수 있어요.</p>
+                    <button id="randomProfileButton" class="secondary-button nickname-random-button" type="button">랜덤 캐릭터</button>
+                  </div>
+
+                  <aside id="selectedCharacterPreview" class="selected-character-preview" aria-live="polite">
+                    <p class="preview-kicker">선택한 캐릭터</p>
+                    <span id="selectedFanCharacterAvatar" class="selected-character-avatar" data-avatar-initial="짱"></span>
+                    <strong id="selectedFanCharacterName">짱돌이</strong>
+                    <span id="selectedFanCharacterDescription">든든하게 함께하는 팬 캐릭터예요.</span>
+                  </aside>
+                </div>
+
+                <fieldset class="fan-character-field">
+                  <legend>캐릭터 선택</legend>
+                  <div id="fanCharacterGrid" class="fan-character-grid" role="radiogroup" aria-label="팬 캐릭터 선택"></div>
+                </fieldset>
+
+                <div class="entry-actions nickname-actions">
+                  <button id="nicknameSubmitButton" class="primary-button nickname-submit-button" type="submit">대기실 입장</button>
+                </div>
+              </section>
+
+              <p class="nickname-footnote">팬 캐릭터는 프로필 아바타로만 사용되며 게임 카드 판정에는 포함되지 않습니다.</p>
+            </form>
+          </div>
         </section>
 
         <section id="lobbyScreen" class="screen hidden bb-screen screen-lobby" data-design-reference="대기실 디자인.png">

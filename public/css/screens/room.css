@@ -1,7 +1,75 @@
 @charset "UTF-8";
 
-/* Stage 5 target: 게임 대기실 디자인.png
-   TODO:
-   - PC: 6 player slots plus room settings/chat/help side area.
-   - Mobile: compact 2-column/list player slots and fixed primary actions.
-   - Human players show fan avatars; AI slots show AI badges only. */
+/* Stage 6 target: game waiting room mockup.
+   AI/user identity is not solved in CSS; later JS rendering should output
+   only one identity string and use room settings for AI difficulty. */
+
+.screen-room .room-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: var(--bb-space-4);
+  min-width: 0;
+  align-items: start;
+}
+
+.screen-room .waiting-players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--bb-space-3);
+  min-width: 0;
+}
+
+.screen-room .waiting-player {
+  display: grid;
+  gap: var(--bb-space-3);
+  min-width: 0;
+  min-height: 132px;
+  overflow: hidden;
+  border: 1px solid var(--bb-line);
+  border-radius: var(--bb-radius-md);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow-card);
+  padding: var(--bb-space-4);
+}
+
+.screen-room .waiting-player h3,
+.screen-room .badge-row {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.screen-room .waiting-player h3 {
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-room .badge-row {
+  display: flex;
+  gap: var(--bb-space-2);
+  flex-wrap: wrap;
+}
+
+.screen-room .room-actions {
+  display: grid;
+  gap: var(--bb-space-3);
+  min-width: 0;
+  padding: var(--bb-space-4);
+}
+
+@media (max-width: 1279px) {
+  .screen-room .room-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .screen-room .waiting-players {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .screen-room .waiting-player {
+    min-height: 112px;
+    padding: var(--bb-space-3);
+  }
+}

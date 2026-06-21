@@ -10,12 +10,12 @@ const CHARACTER_ASSETS = {
 };
 
 const FAN_CHARACTERS = [
-  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
-  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
-  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
-  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
-  { id: "woori", name: "우리", image: "/assets/fan-characters/uri.png" },
-  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
+  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png", description: "든든하게 함께하는 팬 캐릭터예요." },
+  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png", description: "밝고 씩씩하게 응원해 주는 친구예요." },
+  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png", description: "조용하지만 존재감 있는 매력 담당이에요." },
+  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png", description: "상큼하고 통통 튀는 에너지를 가졌어요." },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png", description: "다정하게 곁을 지키는 팬 캐릭터예요." },
+  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png", description: "작고 귀여운 장난기를 품고 있어요." },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
 const FAN_CHARACTER_ALIASES = new Map([
@@ -28,7 +28,6 @@ const FAN_CHARACTER_ALIASES = new Map([
 ]);
 const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
 const FAN_CHARACTER_STORAGE_KEY = "babyblue-fan-character-id";
-const RANDOM_NICKNAMES = ["푸른별", "스포처", "벨친구", "카드왕", "블루링", "하늘종"];
 
 const CARD_BACK_ASSET = "/assets/cards/back.png";
 const VICTORY_SOUND_ASSET = "/assets/sounds/victory.mp3";
@@ -237,6 +236,7 @@ function showScreen(name) {
     element.classList.toggle("hidden", screenName !== name);
   });
   state.activeScreen = name;
+  document.body.classList.toggle("is-nickname-screen", name === "nickname");
   document.body.classList.toggle("is-game-screen", name === "game");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   if (name !== "room") updateStartCountdownOverlay(null);
@@ -535,7 +535,7 @@ function handleFanAvatarImageError(image) {
     missingFanAssetWarnings.add(source);
     console.warn(`Fan character asset failed to load: ${source}`);
   }
-  const holder = image?.closest(".fan-avatar, .fan-character-image");
+  const holder = image?.closest(".fan-avatar, .fan-character-image, .selected-character-avatar");
   holder?.classList.add("image-missing");
   image?.remove();
 }
@@ -546,7 +546,7 @@ document.addEventListener(
   "error",
   (event) => {
     const image = event.target;
-    if (image instanceof HTMLImageElement && image.closest(".fan-avatar, .fan-character-image")) {
+    if (image instanceof HTMLImageElement && image.closest(".fan-avatar, .fan-character-image, .selected-character-avatar")) {
       handleFanAvatarImageError(image);
     }
   },
@@ -560,6 +560,12 @@ function getStoredFanCharacterId() {
 function saveFanCharacterId(value) {
   state.fanCharacterId = normalizeFanCharacterId(value);
   localStorage.setItem(FAN_CHARACTER_STORAGE_KEY, state.fanCharacterId);
+}
+
+function attachFanImageFallback(image) {
+  image?.addEventListener("error", (event) => {
+    handleFanAvatarImageError(event.currentTarget);
+  });
 }
 
 function renderFanAvatar(entity, size = "sm") {
@@ -615,12 +621,32 @@ function updateFanCharacterPicker() {
     const selected = button.dataset.avatarId === state.fanCharacterId;
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-checked", String(selected));
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
   });
+  updateSelectedFanCharacterPreview();
 }
 
 function selectFanCharacter(avatarId) {
   saveFanCharacterId(avatarId);
   updateFanCharacterPicker();
+}
+
+function updateSelectedFanCharacterPreview() {
+  const preview = $("#selectedCharacterPreview");
+  if (!preview) return;
+  const character = fanCharacterById(state.fanCharacterId);
+  const avatar = $("#selectedFanCharacterAvatar");
+  const initial = fanCharacterInitial(character);
+  if (avatar) {
+    avatar.classList.remove("image-missing");
+    avatar.dataset.avatarId = character.id;
+    avatar.dataset.avatarInitial = initial;
+    avatar.innerHTML = `<img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" width="96" height="96" loading="eager" decoding="async" />`;
+    attachFanImageFallback(avatar.querySelector("img"));
+  }
+  setText("#selectedFanCharacterName", character.name);
+  setText("#selectedFanCharacterDescription", character.description || "");
 }
 
 function renderFanCharacterPicker() {
@@ -633,17 +659,16 @@ function renderFanCharacterPicker() {
     button.className = "fan-character-option bb-card-soft";
     button.dataset.avatarId = character.id;
     button.setAttribute("role", "radio");
+    button.setAttribute("aria-label", character.name);
     const initial = fanCharacterInitial(character);
     button.innerHTML = `
       <span class="fan-character-image bb-avatar bb-avatar-user" data-avatar-id="${escapeHtml(character.id)}" data-avatar-initial="${escapeHtml(initial)}">
-        <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" width="56" height="56" loading="eager" decoding="async" />
+        <img src="${escapeHtml(character.image)}" alt="${escapeHtml(character.name)}" width="72" height="72" loading="eager" decoding="async" />
       </span>
       <strong>${escapeHtml(character.name)}</strong>
-      <span class="fan-character-check" aria-hidden="true"></span>
+      <span class="fan-character-check" aria-hidden="true">✓</span>
     `;
-    button.querySelector("img")?.addEventListener("error", (event) => {
-      handleFanAvatarImageError(event.currentTarget);
-    });
+    attachFanImageFallback(button.querySelector("img"));
     button.addEventListener("click", () => selectFanCharacter(character.id));
     grid.appendChild(button);
   }
@@ -661,10 +686,14 @@ function randomInt(min, max) {
 function randomizeProfile() {
   const nextCharacter = FAN_CHARACTERS[randomInt(0, FAN_CHARACTERS.length - 1)];
   selectFanCharacter(nextCharacter.id);
+  syncNicknameSubmitState();
+}
+
+function syncNicknameSubmitState() {
   const input = $("#nicknameInput");
-  if (input && !input.value.trim()) {
-    input.value = RANDOM_NICKNAMES[randomInt(0, RANDOM_NICKNAMES.length - 1)];
-  }
+  const submit = $("#nicknameSubmitButton");
+  if (!input || !submit) return;
+  submit.disabled = !input.value.trim();
 }
 
 function modeLabel(mode) {
@@ -2256,6 +2285,7 @@ $("#nicknameForm").addEventListener("submit", (event) => {
 });
 
 $("#randomProfileButton")?.addEventListener("click", randomizeProfile);
+$("#nicknameInput")?.addEventListener("input", syncNicknameSubmitState);
 $("#openCreateRoomButton").addEventListener("click", openCreateRoomModal);
 $("#guideToggleButton")?.addEventListener("click", toggleLobbyGuide);
 $("#tutorialButton")?.addEventListener("click", async () => {
@@ -2572,6 +2602,7 @@ socket.on("connect", () => {
 preloadAssets();
 saveFanCharacterId(getStoredFanCharacterId());
 renderFanCharacterPicker();
+syncNicknameSubmitState();
 applyBgmMode(getStoredBgmMode(), false);
 applyBgmVolume(getStoredBgmVolume());
 applySfxVolume(getStoredSfxVolume());

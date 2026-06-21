@@ -1,7 +1,62 @@
 @charset "UTF-8";
 
-/* Stage 4 target: 튜토리얼 디자인.png
-   TODO:
-   - Separate tutorial explanation layout from live game controls.
-   - Never place guide text over deck cards, open cards, or the bell button.
-   - Long explanations must scroll or clamp inside their own panel. */
+/* Stage 5 target: tutorial mockup.
+   Current DOM is still an overlay. Later work should split explanation pages
+   from live practice so guide text never covers deck, open cards, or bell. */
+
+.tutorial-overlay {
+  position: fixed;
+  inset: auto var(--bb-space-5) var(--bb-space-5) auto;
+  z-index: var(--bb-z-overlay);
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.tutorial-overlay.hidden {
+  display: none;
+}
+
+.tutorial-card {
+  display: grid;
+  gap: var(--bb-space-3);
+  max-height: min(36vh, 320px);
+  overflow: hidden;
+  border: 1px solid var(--bb-line);
+  border-radius: var(--bb-radius-lg);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--bb-shadow-floating);
+  padding: var(--bb-space-4);
+}
+
+.tutorial-message {
+  min-width: 0;
+  max-height: 6em;
+  overflow-y: auto;
+  margin: 0;
+  color: var(--bb-text-sub);
+  line-height: 1.45;
+}
+
+.tutorial-actions {
+  display: flex;
+  gap: var(--bb-space-2);
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+.tutorial-highlight {
+  outline: 3px solid rgba(246, 183, 53, 0.62);
+  outline-offset: 4px;
+}
+
+@media (max-width: 767px) {
+  .tutorial-overlay {
+    inset: auto var(--bb-space-3) calc(var(--bb-safe-bottom) + var(--bb-space-3));
+    width: auto;
+  }
+
+  .tutorial-card {
+    max-height: 28vh;
+    padding: var(--bb-space-3);
+  }
+}
