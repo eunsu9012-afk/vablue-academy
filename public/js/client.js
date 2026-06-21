@@ -60,6 +60,14 @@ const CARD_COLORS = {
   nano: "#d9faed",
   ruchel: "#dceeff",
 };
+const CARD_VISUAL_THEMES = {
+  seolhong: "card-theme-seolhong",
+  yeowooyeon: "card-theme-yeowooyeon",
+  choiaeri: "card-theme-choiaeri",
+  nunyo: "card-theme-nunyo",
+  nano: "card-theme-nano",
+  ruchel: "card-theme-ruchel",
+};
 const CHARACTER_FALLBACK_LABELS = {
   seolhong: "설홍",
   yeowooyeon: "우연",
@@ -2080,6 +2088,26 @@ function cardIdentity(card) {
   return card?.cardId || card?.id || "";
 }
 
+function getCardThemeId(card) {
+  const counts = new Map();
+  let bestId = card?.items?.[0]?.characterId || "nano";
+  let bestCount = 0;
+  for (const item of card?.items || []) {
+    if (!item?.characterId) continue;
+    const count = (counts.get(item.characterId) || 0) + 1;
+    counts.set(item.characterId, count);
+    if (count > bestCount) {
+      bestId = item.characterId;
+      bestCount = count;
+    }
+  }
+  return bestId;
+}
+
+function getCardThemeClass(card) {
+  return CARD_VISUAL_THEMES[getCardThemeId(card)] || "card-theme-mixed";
+}
+
 function createPlayerZone(playerId) {
   const zone = document.createElement("article");
   zone.className = "player-zone game-player-seat";
@@ -2474,12 +2502,28 @@ function renderDeckCard(clickable) {
 
 function renderFrontCard(card, highlight = []) {
   const element = document.createElement("div");
-  element.className = "front-card";
+  const themeId = getCardThemeId(card);
+  element.className = `front-card open-card ${getCardThemeClass(card)}`;
   element.dataset.cardId = cardIdentity(card);
+  element.dataset.themeId = themeId;
   const firstCharacter = card.items?.[0]?.characterId || "nano";
-  element.style.background = `linear-gradient(160deg, #fff, ${CARD_COLORS[firstCharacter] || "#edf7ff"})`;
+  element.style.setProperty("--open-card-fallback-tint", CARD_COLORS[firstCharacter] || "#edf7ff");
 
   const total = Math.max(1, card.items?.length || 1);
+  element.dataset.faceCount = String(total);
+  const background = document.createElement("div");
+  background.className = "open-card-background";
+  background.setAttribute("aria-hidden", "true");
+  const pattern = document.createElement("div");
+  pattern.className = "open-card-pattern";
+  pattern.setAttribute("aria-hidden", "true");
+  const decoration = document.createElement("div");
+  decoration.className = "open-card-decoration";
+  decoration.setAttribute("aria-hidden", "true");
+  const faceLayer = document.createElement("div");
+  faceLayer.className = "open-card-face-layer";
+  element.replaceChildren(background, pattern, decoration, faceLayer);
+
   for (const item of card.items || []) {
     const slot = CARD_SLOTS[item.slot] || CARD_SLOTS[3];
     const piece = document.createElement("div");
@@ -2507,7 +2551,7 @@ function renderFrontCard(card, highlight = []) {
     image.addEventListener("error", (event) => {
       event.currentTarget.remove();
     });
-    element.appendChild(piece);
+    faceLayer.appendChild(piece);
   }
   return element;
 }
