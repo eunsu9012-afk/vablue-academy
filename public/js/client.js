@@ -2262,6 +2262,7 @@ function openCreateRoomModal() {
   if (defaultAIMode) defaultAIMode.checked = true;
   updateCreateRoomAIModeControls();
   $("#createError").textContent = "";
+  document.body.classList.add("is-create-room-modal-open");
   $("#createRoomModal").classList.remove("hidden");
   $("#roomTitleInput").focus();
 }
@@ -2281,7 +2282,12 @@ function updateCreateRoomAIModeControls() {
 
 function ensureCreateRoomAIModeControls() {
   const aiCountSelect = $("#aiCountSelect");
-  if (!aiCountSelect || $("#aiModeField")) {
+  const existingField = $("#aiModeField");
+  if (!aiCountSelect || existingField) {
+    if (existingField && existingField.dataset.bound !== "true") {
+      existingField.dataset.bound = "true";
+      existingField.addEventListener("change", updateCreateRoomAIModeControls);
+    }
     updateCreateRoomAIModeControls();
     return;
   }
@@ -2306,6 +2312,7 @@ function ensureCreateRoomAIModeControls() {
 
 function closeCreateRoomModal() {
   $("#createRoomModal").classList.add("hidden");
+  document.body.classList.remove("is-create-room-modal-open");
 }
 
 function openPasswordModal(roomId, message = "") {
@@ -2383,6 +2390,7 @@ $("#tutorialButton")?.addEventListener("click", async () => {
   socket.emit("startTutorial");
 });
 $("#closeCreateRoomModalButton").addEventListener("click", closeCreateRoomModal);
+$("#cancelCreateRoomButton")?.addEventListener("click", closeCreateRoomModal);
 $("#createRoomModal").addEventListener("click", (event) => {
   if (event.target.id === "createRoomModal") closeCreateRoomModal();
 });

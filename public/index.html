@@ -331,93 +331,127 @@
 
     <div id="createRoomModal" class="modal-backdrop hidden">
       <form id="createRoomForm" class="modal-card create-room-modal-card">
-        <button id="closeCreateRoomModalButton" class="modal-close-button" type="button" aria-label="닫기">×</button>
-        <h2>방 만들기</h2>
-        <label>
-          <span>방 제목</span>
-          <input id="roomTitleInput" type="text" maxlength="10" autocomplete="off" required />
-        </label>
-        <label class="checkbox-row">
-          <input id="privateRoomCheck" type="checkbox" />
-          <span>비밀번호방</span>
-        </label>
-        <label id="passwordCreateRow" class="hidden">
-          <span>비밀번호</span>
-          <input id="roomPasswordInput" type="text" inputmode="numeric" maxlength="6" />
-          <small>숫자 1~6자리 입력</small>
-        </label>
-        <label>
-          <span>최대 인원</span>
-          <select id="maxPlayersSelect">
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6" selected>6</option>
-          </select>
-        </label>
-        <label>
-          <span>AI 수</span>
-          <select id="aiCountSelect">
-            <option value="0" selected>0</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-          </select>
-        </label>
-        <label>
-          <span>AI 난이도</span>
-          <select id="aiDifficultySelect">
-            <option value="beginner">초급</option>
-            <option value="intermediate" selected>중급</option>
-            <option value="advanced">고급</option>
-          </select>
-        </label>
-        <fieldset class="mode-field">
-          <legend>게임 모드</legend>
-          <label class="radio-row">
-            <input type="radio" name="gameMode" value="normal" checked />
-            <span>일반 모드</span>
-          </label>
-          <label class="radio-row">
-            <input type="radio" name="gameMode" value="hard" />
-            <span>하드 모드</span>
-          </label>
-        </fieldset>
-        <fieldset class="mode-field">
-          <legend>감점 배수</legend>
-          <label class="radio-row">
-            <input type="radio" name="penaltyMultiplier" value="1" checked />
-            <span>1배</span>
-          </label>
-          <label class="radio-row">
-            <input type="radio" name="penaltyMultiplier" value="2" />
-            <span>2배</span>
-          </label>
-          <label class="radio-row">
-            <input type="radio" name="penaltyMultiplier" value="3" />
-            <span>3배</span>
-          </label>
-        </fieldset>
-        <fieldset class="mode-field turn-time-field">
-          <legend>턴 시간</legend>
-          <label class="radio-row">
-            <input type="radio" name="turnTime" value="6" checked />
-            <span>6초</span>
-          </label>
-          <label class="radio-row">
-            <input type="radio" name="turnTime" value="8" />
-            <span>8초</span>
-          </label>
-          <label class="radio-row">
-            <input type="radio" name="turnTime" value="10" />
-            <span>10초</span>
-          </label>
-        </fieldset>
-        <button class="primary-button" type="submit">방 생성</button>
+        <header class="modal-header create-room-modal-header">
+          <div>
+            <p class="modal-eyebrow">Room Setup</p>
+            <h2>방 만들기</h2>
+          </div>
+          <button id="closeCreateRoomModalButton" class="modal-close-button" type="button" aria-label="닫기">×</button>
+        </header>
+
+        <div class="create-room-form-body">
+          <div class="create-room-grid">
+            <label class="create-room-field field-room-title">
+              <span>방 제목</span>
+              <input id="roomTitleInput" type="text" maxlength="10" autocomplete="off" required />
+            </label>
+
+            <label class="create-room-field checkbox-row field-password-toggle">
+              <input id="privateRoomCheck" type="checkbox" />
+              <span>비밀번호방</span>
+            </label>
+
+            <label id="passwordCreateRow" class="create-room-field field-password-input hidden">
+              <span>비밀번호</span>
+              <input id="roomPasswordInput" type="text" inputmode="numeric" maxlength="6" />
+              <small>숫자 1~6자리</small>
+            </label>
+
+            <label class="create-room-field field-max-players">
+              <span>최대 인원</span>
+              <select id="maxPlayersSelect">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6" selected>6</option>
+              </select>
+            </label>
+
+            <fieldset class="mode-field create-room-segment field-mode">
+              <legend>게임 모드</legend>
+              <label class="radio-row">
+                <input type="radio" name="gameMode" value="normal" checked />
+                <span>일반</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="gameMode" value="hard" />
+                <span>하드</span>
+              </label>
+            </fieldset>
+
+            <fieldset class="mode-field create-room-segment field-penalty">
+              <legend>감점 배수</legend>
+              <label class="radio-row">
+                <input type="radio" name="penaltyMultiplier" value="1" checked />
+                <span>1배</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="penaltyMultiplier" value="2" />
+                <span>2배</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="penaltyMultiplier" value="3" />
+                <span>3배</span>
+              </label>
+            </fieldset>
+
+            <fieldset id="aiModeField" class="mode-field create-room-segment ai-mode-field field-ai-setting">
+              <legend>AI 설정</legend>
+              <label class="radio-row">
+                <input type="radio" name="aiMode" value="enabled" checked />
+                <span>AI 포함</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="aiMode" value="playersOnly" />
+                <span>플레이어만</span>
+              </label>
+            </fieldset>
+
+            <label class="create-room-field field-ai-count">
+              <span>AI 수</span>
+              <select id="aiCountSelect">
+                <option value="0" selected>0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+
+            <label class="create-room-field field-ai-difficulty">
+              <span>AI 난이도</span>
+              <select id="aiDifficultySelect">
+                <option value="beginner">초급</option>
+                <option value="intermediate" selected>중급</option>
+                <option value="advanced">고급</option>
+              </select>
+            </label>
+
+            <fieldset class="mode-field create-room-segment turn-time-field field-turn-time">
+              <legend>턴 시간</legend>
+              <label class="radio-row">
+                <input type="radio" name="turnTime" value="6" checked />
+                <span>6초</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="turnTime" value="8" />
+                <span>8초</span>
+              </label>
+              <label class="radio-row">
+                <input type="radio" name="turnTime" value="10" />
+                <span>10초</span>
+              </label>
+            </fieldset>
+          </div>
+        </div>
+
         <p id="createError" class="error-text"></p>
+        <div class="modal-actions create-room-actions">
+          <button id="cancelCreateRoomButton" class="secondary-button" type="button">취소</button>
+          <button class="primary-button" type="submit">방 만들기</button>
+        </div>
       </form>
     </div>
 
