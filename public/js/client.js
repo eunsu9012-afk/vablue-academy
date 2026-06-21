@@ -2051,10 +2051,11 @@ function updateResponsiveSizes() {
 
   openWidth = Math.max(count >= 5 ? 112 : 128, openWidth);
   const deckWidth = Math.max(82, Math.round(openWidth * 0.72));
-  const deckOffset = deckWidth + Math.max(6, Math.round(openWidth * 0.05));
-  const bellBase = count <= 2 ? 180 : count <= 4 ? 150 : 136;
-  const bellSize = Math.max(112, Math.min(192, Math.round(bellBase * tableScale)));
-  const seatWidth = Math.round(openWidth + deckOffset + 14);
+  const slotGap = Math.max(12, Math.round(openWidth * 0.1));
+  const deckOffset = deckWidth + slotGap;
+  const bellBase = count <= 2 ? 162 : count <= 4 ? 135 : 120;
+  const bellSize = Math.max(98, Math.min(170, Math.round(bellBase * tableScale)));
+  const seatWidth = Math.round(openWidth + deckWidth + slotGap + 18);
   const cardScale = openWidth / 160;
   const playerScale = Math.min(1.08, Math.max(0.72, cardScale));
   const timerScale = Math.min(1.05, Math.max(0.78, tableScale));
@@ -2072,6 +2073,7 @@ function updateResponsiveSizes() {
   root.style.setProperty("--bell-size", `${bellSize}px`);
   root.style.setProperty("--seat-width", `${seatWidth}px`);
   root.style.setProperty("--deck-offset", `${deckOffset}px`);
+  root.style.setProperty("--card-slot-gap", `${slotGap}px`);
 }
 
 function cardIdentity(card) {

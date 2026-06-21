@@ -738,9 +738,54 @@ body.is-game-screen #mobileBoardStats {
 }
 
 @media (min-width: 1280px) {
+  body.is-game-screen #gameBoard::before {
+    width: min(58vmin, 590px);
+    height: min(58vmin, 590px);
+    opacity: 0.72;
+  }
+
+  body.is-game-screen #gameBoard::after {
+    width: min(32vmin, 320px);
+    height: min(32vmin, 320px);
+    opacity: 0.56;
+  }
+
   body.is-game-screen #gameScreen .game-layout {
     max-width: 1760px;
     margin-inline: auto;
+  }
+
+  body.is-game-screen #gameScreen .card-stack {
+    display: grid;
+    grid-template-columns: var(--deck-card-width, 84px) var(--open-card-width, 118px);
+    gap: var(--card-slot-gap, 12px);
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--deck-card-width, 84px) + var(--open-card-width, 118px) + var(--card-slot-gap, 12px));
+  }
+
+  body.is-game-screen #gameScreen .deck-slot,
+  body.is-game-screen #gameScreen .pile-slot {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    z-index: auto;
+    display: grid;
+    place-items: center;
+    transform: none;
+  }
+
+  body.is-game-screen #bellButton {
+    box-shadow:
+      0 0 0 4px rgba(255, 255, 255, 0.68),
+      0 0 0 8px rgba(111, 159, 255, 0.08),
+      0 14px 26px rgba(6, 21, 83, 0.24);
+  }
+
+  body.is-game-screen #bellButton::before {
+    inset: -8%;
+    opacity: 0.54;
   }
 }
 
