@@ -60,7 +60,8 @@ const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
-const CARD_REVEAL_HOLD_MS = 600;
+const POST_CARD_OPEN_TURN_DELAY_MS = 100;
+const AI_CARD_READ_HOLD_MS = 600;
 const START_COUNTDOWN_MS = 3000;
 const GAME_START_READY_TIMEOUT_MS = 10000;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
@@ -83,7 +84,7 @@ const AI_DIFFICULTY_SETTINGS = {
   tutorial: { label: "튜토리얼", correctDelay: [9000, 14000] },
 };
 const AI_MIN_BELL_REACTION_MS = 600;
-const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY_MS, CARD_REVEAL_HOLD_MS);
+const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY_MS, AI_CARD_READ_HOLD_MS);
 const ASSETS_NOT_READY_MESSAGE = "게임 자료 확인이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
@@ -1890,7 +1891,7 @@ function handleFlipCard(room, player) {
   room.game.currentTurnPlayerId = null;
   room.game.turnStartedAt = openedAt;
   room.game.turnEndsAt = 0;
-  room.game.nextFlipAllowedAt = openedAt + CARD_REVEAL_HOLD_MS + TURN_START_DELAY_MS;
+  room.game.nextFlipAllowedAt = openedAt + POST_CARD_OPEN_TURN_DELAY_MS;
   room.game.turnSerial = (room.game.turnSerial || 0) + 1;
   room.game.lastCardOpenedAt = openedAt;
   room.game.lastOpenedCardId = openedCard.cardId;
@@ -1925,7 +1926,7 @@ function handleFlipCard(room, player) {
       emitGameState(liveRoom);
       if (!liveRoom.isTutorial || liveRoom.tutorialPhase === "practice") scheduleAI(liveRoom);
     }
-  }, CARD_REVEAL_HOLD_MS);
+  }, POST_CARD_OPEN_TURN_DELAY_MS);
   return true;
 }
 
