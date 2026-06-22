@@ -191,6 +191,7 @@ let latencyNonce = 0;
 let mobileTouchLastAt = 0;
 let emoteCooldownUntil = 0;
 let emoteCooldownTimer = null;
+let pendingFlipTurnKey = null;
 const pendingLatencyPings = new Map();
 const missingFanAssetWarnings = new Set();
 const activePlayerEmotes = new Map();
@@ -380,6 +381,7 @@ function showScreen(name) {
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
   if (name !== "game") {
+    pendingFlipTurnKey = null;
     document.body.classList.remove("is-tutorial-game");
     stopTurnTimer();
     clearFlipAvailabilityTimer();
@@ -552,6 +554,23 @@ function isMobileMode() {
   return window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
 }
 
+function isTypingTarget(target = document.activeElement) {
+  const element = target instanceof Element ? target : document.activeElement;
+  const tag = element?.tagName?.toLowerCase();
+  return ["input", "textarea", "select"].includes(tag) || Boolean(element?.isContentEditable);
+}
+
+function isGameScreenActive() {
+  return state.activeScreen === "game"
+    && Boolean(state.game)
+    && !state.gameResult
+    && !document.body.classList.contains("is-result-overlay-open");
+}
+
+function isSettingsPanelOpen() {
+  return !$("#settingsPanel")?.classList.contains("hidden");
+}
+
 function isActualMobileGameScreen() {
   return isMobileMode()
     && state.activeScreen === "game"
@@ -597,6 +616,21 @@ function getSelfPlayer(game = state.game) {
   return game?.players?.find((player) => player.id === game.selfPlayerId) || null;
 }
 
+function getFlipTurnKey(game = state.game) {
+  if (!game?.roomId || !game.currentTurnPlayerId) return null;
+  return `${game.roomId}:${game.currentTurnPlayerId}:${Number(game.turnStartedAt || 0)}`;
+}
+
+function isFlipRequestPendingForTurn(game = state.game) {
+  const key = getFlipTurnKey(game);
+  return Boolean(key && pendingFlipTurnKey === key);
+}
+
+function syncPendingFlipTurn(game = state.game) {
+  const key = getFlipTurnKey(game);
+  if (key && key !== pendingFlipTurnKey) pendingFlipTurnKey = null;
+}
+
 function isSelfAbleToAct(game = state.game) {
   if (!state.gameInteractive && !game?.isTutorial) return false;
   const self = getSelfPlayer(game);
@@ -625,6 +659,7 @@ function requestBell() {
 function isFlipAvailable(game = state.game) {
   if (!state.assetsReady) return false;
   if (!isSelfAbleToAct(game)) return false;
+  if (isFlipRequestPendingForTurn(game)) return false;
   const self = getSelfPlayer(game);
   if (self?.id !== game.currentTurnPlayerId) return false;
   return Date.now() >= Number(game.nextFlipAllowedAt || 0);
@@ -633,13 +668,14 @@ function isFlipAvailable(game = state.game) {
 function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
   if (!game || game.status !== "playing") return FLIP_NOT_STARTED_MESSAGE;
   if (!ownDeck) return FLIP_NOT_OWN_CARD_MESSAGE;
+  if (isFlipRequestPendingForTurn(game)) return FLIP_ALREADY_OPENED_MESSAGE;
   if (!state.gameInteractive && !game.isTutorial) return FLIP_WAITING_MESSAGE;
   if (!state.assetsReady) return START_ASSETS_MESSAGE;
   const self = getSelfPlayer(game);
   if (!self || self.spectator || self.eliminated) return "현재는 카드를 오픈할 수 없습니다.";
   if (game.bellLocked) return "종 판정 중입니다. 잠시 후 조작할 수 있습니다.";
   if (self.id !== game.currentTurnPlayerId) return FLIP_NOT_TURN_MESSAGE;
-  if (Date.now() < Number(game.nextFlipAllowedAt || 0)) return FLIP_ALREADY_OPENED_MESSAGE;
+  if (Date.now() < Number(game.nextFlipAllowedAt || 0)) return FLIP_WAITING_MESSAGE;
   return "";
 }
 
@@ -662,6 +698,7 @@ async function requestFlipCard({ showReason = false, ownDeck = true } = {}) {
     if (showReason) showFlipUnavailableReason({ ownDeck });
     return;
   }
+  pendingFlipTurnKey = getFlipTurnKey(state.game);
   socket.emit("flipCard");
 }
 
@@ -1239,10 +1276,11 @@ function createCachedCardImage(url) {
   image.setAttribute("aria-hidden", "true");
   image.decoding = "sync";
   image.loading = "eager";
+  image.fetchPriority = "high";
   image.draggable = false;
   image.width = 256;
   image.height = 256;
-  if (!image.src) image.src = url;
+  image.src = url;
   return { image, loaded: Boolean(cached) };
 }
 
@@ -1250,7 +1288,7 @@ function preloadCardImages(card) {
   const urls = [...new Set((card?.items || [])
     .map((item) => CHARACTER_ASSETS[item.characterId])
     .filter(Boolean))];
-  return Promise.all(urls.map(preloadImage));
+  return Promise.allSettled(urls.map(preloadImage));
 }
 
 function preloadRequiredAssets() {
@@ -2694,6 +2732,7 @@ function renderGame(game) {
   pendingPreGameState = null;
   state.game = game;
   state.room = null;
+  syncPendingFlipTurn(game);
   if (previousRoomId !== game.roomId) {
     state.mobileInfoRoomId = game.roomId;
     state.mobileGameInfoExpanded = false;
@@ -3021,6 +3060,7 @@ function renderFrontCard(card, highlight = []) {
   element.dataset.themeId = themeId;
   const firstCharacter = card.items?.[0]?.characterId || "nano";
   element.style.setProperty("--open-card-fallback-tint", CARD_COLORS[firstCharacter] || "#edf7ff");
+  preloadCardImages(card);
 
   const total = Math.max(1, card.items?.length || 1);
   element.dataset.faceCount = String(total);
@@ -3376,41 +3416,15 @@ function getSelectedAIMode() {
 }
 
 function updateCreateRoomAIModeControls() {
-  const playersOnly = getSelectedAIMode() === "playersOnly";
-  const aiCountSelect = $("#aiCountSelect");
-  const aiDifficultySelect = $("#aiDifficultySelect");
-  aiCountSelect?.closest("label")?.classList.toggle("hidden", playersOnly);
-  aiDifficultySelect?.closest("label")?.classList.toggle("hidden", playersOnly);
-  if (playersOnly && aiCountSelect) aiCountSelect.value = "0";
+  // AI count and difficulty are selected later in the room waiting screen.
 }
 
 function ensureCreateRoomAIModeControls() {
-  const aiCountSelect = $("#aiCountSelect");
   const existingField = $("#aiModeField");
-  if (!aiCountSelect || existingField) {
-    if (existingField && existingField.dataset.bound !== "true") {
-      existingField.dataset.bound = "true";
-      existingField.addEventListener("change", updateCreateRoomAIModeControls);
-    }
-    updateCreateRoomAIModeControls();
-    return;
+  if (existingField && existingField.dataset.bound !== "true") {
+    existingField.dataset.bound = "true";
+    existingField.addEventListener("change", updateCreateRoomAIModeControls);
   }
-  const field = document.createElement("fieldset");
-  field.id = "aiModeField";
-  field.className = "mode-field ai-mode-field";
-  field.innerHTML = `
-    <legend>AI 설정</legend>
-    <label class="radio-row">
-      <input type="radio" name="aiMode" value="enabled" checked />
-      <span>AI 포함</span>
-    </label>
-    <label class="radio-row">
-      <input type="radio" name="aiMode" value="playersOnly" />
-      <span>플레이어만</span>
-    </label>
-  `;
-  aiCountSelect.closest("label")?.before(field);
-  field.addEventListener("change", updateCreateRoomAIModeControls);
   updateCreateRoomAIModeControls();
 }
 
@@ -3504,11 +3518,11 @@ $("#createRoomForm").addEventListener("submit", (event) => {
   const password = $("#roomPasswordInput").value.trim();
   const maxPlayers = Number($("#maxPlayersSelect").value);
   const aiMode = getSelectedAIMode();
-  const aiCount = aiMode === "enabled" ? Number($("#aiCountSelect").value) : 0;
+  const aiCount = 0;
   const mode = document.querySelector("input[name='gameMode']:checked")?.value || "normal";
   const penaltyMultiplier = Number(document.querySelector("input[name='penaltyMultiplier']:checked")?.value || 1);
   const turnTime = Number(document.querySelector("input[name='turnTime']:checked")?.value || 6);
-  const aiDifficulty = $("#aiDifficultySelect")?.value || "intermediate";
+  const aiDifficulty = "intermediate";
   $("#createError").textContent = "";
 
   if (!title || title.length > 10) {
@@ -3519,11 +3533,6 @@ $("#createRoomForm").addEventListener("submit", (event) => {
     $("#createError").textContent = "비밀번호는 숫자 1~6자리여야 합니다.";
     return;
   }
-  if (aiMode === "enabled" && aiCount + 1 > maxPlayers) {
-    $("#createError").textContent = "AI 수가 최대 인원을 초과합니다.";
-    return;
-  }
-
   socket.emit("createRoom", { title, isPrivate, password, maxPlayers, aiCount, aiMode, mode, penaltyMultiplier, turnTime, aiDifficulty });
 });
 
@@ -3660,12 +3669,35 @@ document.addEventListener("click", (event) => {
   hideContextMenu();
 });
 
+function handleGameSpaceKeyDown(event) {
+  if (event.code !== "Space" || !isGameScreenActive()) return;
+  if (isTypingTarget(event.target) || isAnyModalOpen() || isSettingsPanelOpen()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+  if (!state.gameInteractive) return;
+  requestBell();
+}
+
+function blockGameSpaceKeyUp(event) {
+  if (event.code !== "Space" || !isGameScreenActive()) return;
+  if (isTypingTarget(event.target) || isAnyModalOpen() || isSettingsPanelOpen()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+}
+
+document.addEventListener("keydown", handleGameSpaceKeyDown, true);
+document.addEventListener("keypress", blockGameSpaceKeyUp, true);
+document.addEventListener("keyup", blockGameSpaceKeyUp, true);
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     hideContextMenu();
     closeCreateRoomModal();
     closeSettingsPanel();
   }
+  if (event.defaultPrevented) return;
   if (isFormFieldFocused()) return;
   const emoteByKey = { a: "heung", s: "ing", d: "pup" };
   const emoteId = emoteByKey[event.key?.toLowerCase?.()];
@@ -3674,7 +3706,7 @@ document.addEventListener("keydown", (event) => {
     requestEmote(emoteId);
     return;
   }
-  if (state.activeScreen === "game" && event.code === "Space") {
+  if (event.code === "Space" && isGameScreenActive() && !isAnyModalOpen() && !isSettingsPanelOpen() && state.gameInteractive) {
     event.preventDefault();
     requestBell();
   }

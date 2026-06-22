@@ -1600,7 +1600,9 @@ function setCurrentTurn(room, playerId) {
   clearTurnTimer(room);
   const now = Date.now();
   const turnDurationMs = getTurnDurationMs(room);
-  const nextFlipAllowedAt = now + TURN_START_DELAY_MS;
+  const player = findPlayer(room, playerId);
+  const turnStartDelayMs = player?.isAI ? TURN_START_DELAY_MS : 0;
+  const nextFlipAllowedAt = now + turnStartDelayMs;
   room.game.currentTurnPlayerId = playerId;
   room.game.turnStartedAt = now;
   room.game.turnEndsAt = nextFlipAllowedAt + turnDurationMs;
@@ -1613,7 +1615,7 @@ function setCurrentTurn(room, playerId) {
     if (!liveRoom?.game || liveRoom.status !== "playing") return;
     if (liveRoom.game.bellLocked || liveRoom.game.turnSerial !== turnSerial) return;
     handleTurnTimeout(liveRoom, playerId);
-  }, TURN_START_DELAY_MS + turnDurationMs + 40);
+  }, turnStartDelayMs + turnDurationMs + 40);
 }
 
 function getTutorialHuman(room) {
