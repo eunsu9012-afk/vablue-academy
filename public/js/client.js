@@ -116,6 +116,8 @@ const state = {
   assetsReady: false,
   assetsLoading: false,
   assetLoadFailures: [],
+  gameStartSync: null,
+  gameInteractive: true,
   tutorial: {
     active: false,
     stepIndex: 0,
@@ -390,6 +392,7 @@ function getSelfPlayer(game = state.game) {
 }
 
 function isSelfAbleToAct(game = state.game) {
+  if (!state.gameInteractive && !game?.isTutorial) return false;
   const self = getSelfPlayer(game);
   return Boolean(game && self && !self.spectator && !self.eliminated && game.status === "playing" && !game.bellLocked);
 }
@@ -407,6 +410,7 @@ function isBellAvailable(game = state.game) {
 }
 
 function requestBell() {
+  if (!state.gameInteractive && !state.game?.isTutorial) return;
   socket.emit("ringBell");
 }
 
@@ -1060,13 +1064,23 @@ function playBellAnimation() {
 
 function ensurePreGameCountdownOverlay() {
   let overlay = $("#preGameCountdownOverlay");
-  if (overlay) return overlay;
+  const markup = `
+    <strong id="preGameCountdownNumber" class="pre-game-countdown-number">3</strong>
+    <div id="preGameWaitingCard" class="pre-game-waiting-card hidden" role="status">
+      <strong>잠시만 기다려주십시오</strong>
+      <span>다른 플레이어의 화면을 준비하고 있습니다.</span>
+    </div>
+  `;
+  if (overlay) {
+    if (!$("#preGameCountdownNumber") || !$("#preGameWaitingCard")) overlay.innerHTML = markup;
+    return overlay;
+  }
   overlay = document.createElement("div");
   overlay.id = "preGameCountdownOverlay";
   overlay.className = "pre-game-countdown-overlay hidden";
   overlay.setAttribute("aria-live", "assertive");
   overlay.setAttribute("aria-hidden", "true");
-  overlay.innerHTML = `<strong id="preGameCountdownNumber" class="pre-game-countdown-number">3</strong>`;
+  overlay.innerHTML = markup;
   document.body.appendChild(overlay);
   return overlay;
 }
@@ -1076,6 +1090,7 @@ function hidePreGameCountdownOverlay() {
   if (!overlay) return;
   overlay.classList.add("hidden");
   overlay.classList.remove("is-pulse");
+  overlay.classList.remove("is-waiting");
   overlay.setAttribute("aria-hidden", "true");
 }
 
@@ -1084,12 +1099,28 @@ function showPreGameCountdownNumber(number) {
   const numberElement = $("#preGameCountdownNumber");
   if (!overlay || !numberElement) return;
   numberElement.textContent = String(number);
+  numberElement.classList.remove("hidden");
+  $("#preGameWaitingCard")?.classList.add("hidden");
   overlay.classList.remove("hidden");
+  overlay.classList.remove("is-waiting");
   overlay.classList.remove("is-pulse");
   overlay.setAttribute("aria-hidden", "false");
   void overlay.offsetWidth;
   overlay.classList.add("is-pulse");
   playBellSound();
+}
+
+function showGameStartWaitingOverlay() {
+  const overlay = ensurePreGameCountdownOverlay();
+  const numberElement = $("#preGameCountdownNumber");
+  const waitingCard = $("#preGameWaitingCard");
+  clearStartCountdownTimer();
+  if (numberElement) numberElement.classList.add("hidden");
+  if (waitingCard) waitingCard.classList.remove("hidden");
+  overlay.classList.remove("hidden");
+  overlay.classList.remove("is-pulse");
+  overlay.classList.add("is-waiting");
+  overlay.setAttribute("aria-hidden", "false");
 }
 
 function runPreGameCountdown() {
@@ -1138,6 +1169,74 @@ function cancelPreGameCountdown() {
   preGameCountdownPromise = null;
   pendingPreGameState = null;
   hidePreGameCountdownOverlay();
+}
+
+function resetGameStartSync() {
+  state.gameStartSync = null;
+  state.gameInteractive = true;
+  pendingPreGameState = null;
+  clearStartCountdownTimer();
+  hidePreGameCountdownOverlay();
+}
+
+function isCurrentGameStartSync(payload) {
+  return Boolean(
+    payload
+    && state.gameStartSync
+    && String(state.gameStartSync.roomId) === String(payload.roomId || "")
+    && state.gameStartSync.token === String(payload.token || ""),
+  );
+}
+
+function emitClientGameReady(payload) {
+  if (!isCurrentGameStartSync(payload) || state.gameStartSync.readySent) return;
+  state.gameStartSync.readySent = true;
+  socket.emit("clientGameReady", { roomId: payload.roomId, token: payload.token });
+}
+
+async function prepareGameStart(payload) {
+  if (!payload?.roomId || !payload?.token) return;
+  const token = String(payload.token);
+  const roomId = String(payload.roomId);
+  if (!state.gameStartSync || state.gameStartSync.token !== token || String(state.gameStartSync.roomId) !== roomId) {
+    state.gameStartSync = {
+      roomId,
+      token,
+      readySent: false,
+      displayAllowed: false,
+      waiting: false,
+    };
+  }
+  state.gameInteractive = false;
+  pendingPreGameState = null;
+  updateStartCountdownOverlay({
+    startedAt: payload.startedAt,
+    endsAt: payload.startAt,
+    totalMs: payload.countdownMs || 3000,
+  });
+
+  await ensureAssetsReady();
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  emitClientGameReady(payload);
+}
+
+function renderPendingGameStartState() {
+  const game = pendingPreGameState;
+  if (!game) return false;
+  pendingPreGameState = null;
+  state.gameInteractive = true;
+  state.gameStartSync = null;
+  hidePreGameCountdownOverlay();
+  renderGame(game);
+  return true;
+}
+
+function handleGameDisplayNow(payload) {
+  const hasPendingForRoom = pendingPreGameState && String(pendingPreGameState.roomId) === String(payload?.roomId || "");
+  if (!isCurrentGameStartSync(payload) && !hasPendingForRoom) return;
+  if (state.gameStartSync) state.gameStartSync.displayAllowed = true;
+  state.gameInteractive = true;
+  if (!renderPendingGameStartState()) hidePreGameCountdownOverlay();
 }
 
 bgm.addEventListener("ended", playNextBgmTrack);
@@ -2006,6 +2105,7 @@ function renderRoom(room) {
     state.game = null;
     state.gameResult = null;
     victoryPlayedForResult = false;
+    resetGameStartSync();
     resetTutorialState(false);
     hideTutorialOverlay();
     const overlay = $("#resultOverlay");
@@ -2023,6 +2123,9 @@ function renderRoom(room) {
   state.game = null;
   state.gameResult = null;
   victoryPlayedForResult = false;
+  if (state.gameStartSync && (String(state.gameStartSync.roomId) !== String(room.id) || (!room.countdown && room.status !== "countdown"))) {
+    resetGameStartSync();
+  }
   showScreen("room");
   setText("#roomTitle", room.title);
   updateRoomSummary(room);
@@ -2030,7 +2133,7 @@ function renderRoom(room) {
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
   const isHost = self?.id === room.hostId;
-  const isCountdown = Boolean(room.countdown) || room.status === "countdown";
+  const isCountdown = Boolean(room.countdown) || room.status === "countdown" || Boolean(room.starting);
   const isPlayersOnly = room.aiMode === "playersOnly";
   const visiblePlayers = roomVisiblePlayers(room);
   const humanPlayers = visiblePlayers.filter((player) => !player.isAI);
@@ -2262,6 +2365,9 @@ function renderEmptyCardSpace() {
 
 function renderGame(game) {
   const previousRoomId = state.game?.roomId;
+  state.gameStartSync = null;
+  state.gameInteractive = true;
+  pendingPreGameState = null;
   state.game = game;
   state.room = null;
   if (previousRoomId !== game.roomId) {
@@ -2503,6 +2609,7 @@ function shouldIgnoreMobileGameTouch(event) {
 
 async function handleMobileGameBoardTouch(event) {
   if (shouldIgnoreMobileGameTouch(event)) return;
+  if (!state.gameInteractive && !state.game?.isTutorial) return;
   const now = Date.now();
   if (now - mobileTouchLastAt < 300) return;
 
@@ -3217,7 +3324,7 @@ document.addEventListener("keydown", (event) => {
   if (isFormFieldFocused() || state.activeScreen !== "game") return;
   if (event.code === "Space") {
     event.preventDefault();
-    socket.emit("ringBell");
+    requestBell();
   }
   if (/^Numpad[1-5]$/.test(event.code)) {
     socket.emit("sendEmote", { emote: event.code.replace("Numpad", "") });
@@ -3270,9 +3377,29 @@ socket.on("roomState", (payload) => {
   renderRoom(payload);
 });
 
+socket.on("gameStartPrepare", (payload) => {
+  startGameRequestPending = false;
+  void prepareGameStart(payload);
+});
+
+socket.on("gameStartWaiting", (payload) => {
+  if (!isCurrentGameStartSync(payload)) return;
+  state.gameStartSync.waiting = true;
+  showGameStartWaitingOverlay();
+});
+
+socket.on("gameDisplayNow", (payload) => {
+  handleGameDisplayNow(payload);
+});
+
 socket.on("gameState", async (payload) => {
   if (!payload) return;
   await ensureAssetsReady();
+  if (!payload.isTutorial && state.gameStartSync && String(state.gameStartSync.roomId) === String(payload.roomId)) {
+    pendingPreGameState = payload;
+    if (state.gameStartSync.displayAllowed) renderPendingGameStartState();
+    return;
+  }
   if (shouldDelayGameScreenForPreGameCountdown(payload)) {
     pendingPreGameState = payload;
     await runPreGameCountdown();

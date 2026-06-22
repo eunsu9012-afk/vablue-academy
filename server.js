@@ -34,6 +34,7 @@ const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
 const CARD_REVEAL_HOLD_MS = 600;
 const START_COUNTDOWN_MS = 3000;
+const GAME_START_READY_TIMEOUT_MS = 10000;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
 const AI_FLIP_EXTRA_DELAY_MAX_MS = 400;
 const BASE_PENALTY = 5;
@@ -458,6 +459,7 @@ function roomAllowsAI(room) {
 function getStartBlockReason(room, { ignoreCountdown = false } = {}) {
   if (!room || room.status !== "waiting") return "게임을 시작할 수 없습니다.";
   if (room.startCountdown && !ignoreCountdown) return "게임 시작 카운트다운 중입니다.";
+  if (room.starting && !ignoreCountdown) return "게임 시작 준비 중입니다.";
   if (!roomAllowsAI(room) && room.players.some((player) => player.isAI)) {
     return "플레이어만 방에는 AI를 추가할 수 없습니다.";
   }
@@ -494,7 +496,7 @@ function serializeRoomForLobby(room) {
     currentPlayers: room.players.filter((player) => !player.spectator).length,
     maxPlayers: room.maxPlayers,
     hasPassword: room.hasPassword,
-    status: room.startCountdown ? "countdown" : room.status,
+    status: room.startCountdown || room.starting ? "countdown" : room.status,
   };
 }
 
@@ -594,8 +596,9 @@ function serializeRoom(room, selfPlayerId = null) {
     isTutorial: Boolean(room.isTutorial),
     hasPassword: room.hasPassword,
     maxPlayers: room.maxPlayers,
-    status: room.startCountdown ? "countdown" : room.status,
+    status: room.startCountdown || room.starting ? "countdown" : room.status,
     countdown: serializeCountdown(room),
+    starting: Boolean(room.starting),
     hostId: room.hostId,
     selfPlayerId,
     canStart: canStartGame(room),
@@ -685,6 +688,80 @@ function emitGameState(room) {
   for (const player of getHumanPlayers(room)) {
     const socket = getSocketById(player.socketId);
     if (socket) socket.emit("gameState", serializeGame(room, player.id));
+  }
+}
+
+function createGameStartToken(room) {
+  return `${room.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function serializeGameStartSync(room) {
+  const countdown = serializeCountdown(room);
+  return {
+    roomId: room.id,
+    token: room.gameStartSync?.token || "",
+    countdownMs: countdown?.totalMs || START_COUNTDOWN_MS,
+    startedAt: countdown?.startedAt || Date.now(),
+    startAt: countdown?.endsAt || Date.now() + START_COUNTDOWN_MS,
+  };
+}
+
+function getGameStartReadyTargets(room) {
+  return getHumanPlayers(room).filter((player) => (
+    !player.spectator
+    && player.connected
+    && player.socketId
+    && Boolean(getSocketById(player.socketId))
+  ));
+}
+
+function refreshGameStartTargets(room) {
+  const sync = room?.gameStartSync;
+  if (!sync) return new Set();
+  const targetIds = new Set(getGameStartReadyTargets(room).map((player) => player.socketId));
+  sync.targetSocketIds = targetIds;
+  for (const socketId of [...sync.readySocketIds]) {
+    if (!targetIds.has(socketId)) sync.readySocketIds.delete(socketId);
+  }
+  return targetIds;
+}
+
+function areGameStartTargetsReady(room) {
+  const sync = room?.gameStartSync;
+  if (!sync) return false;
+  const targetIds = refreshGameStartTargets(room);
+  return targetIds.size > 0 && [...targetIds].every((socketId) => sync.readySocketIds.has(socketId));
+}
+
+function emitGameStartPrepare(room) {
+  const payload = serializeGameStartSync(room);
+  for (const player of getGameStartReadyTargets(room)) {
+    const socket = getSocketById(player.socketId);
+    if (socket) socket.emit("gameStartPrepare", payload);
+  }
+}
+
+function emitGameStartWaiting(room, readyOnly = true) {
+  const sync = room?.gameStartSync;
+  if (!sync) return;
+  const payload = {
+    ...serializeGameStartSync(room),
+    waitingSince: sync.waitingSince || Date.now(),
+    message: "다른 플레이어의 화면을 준비하고 있습니다.",
+  };
+  for (const player of getGameStartReadyTargets(room)) {
+    const socket = getSocketById(player.socketId);
+    if (!socket) continue;
+    if (readyOnly && !sync.readySocketIds.has(socket.id)) continue;
+    socket.emit("gameStartWaiting", payload);
+  }
+}
+
+function emitGameDisplayNow(room, token, forced = false) {
+  const payload = { roomId: room.id, token, forced };
+  for (const player of getHumanPlayers(room)) {
+    const socket = getSocketById(player.socketId);
+    if (socket) socket.emit("gameDisplayNow", payload);
   }
 }
 
@@ -842,12 +919,70 @@ function clearStartCountdown(room) {
   room.startCountdown = null;
 }
 
+function clearGameStartSync(room) {
+  if (!room?.gameStartSync) {
+    if (room) room.starting = false;
+    return;
+  }
+  if (room.gameStartSync.readyTimeoutTimer) clearTimeout(room.gameStartSync.readyTimeoutTimer);
+  room.gameStartSync = null;
+  room.starting = false;
+}
+
 function cancelStartCountdown(room, reason = "") {
   if (!room?.startCountdown) return;
   clearStartCountdown(room);
+  clearGameStartSync(room);
   logEvent("Start countdown canceled", `${room.title}${reason ? ` / ${reason}` : ""}`);
   emitRoomState(room);
   emitLobbyState();
+}
+
+function beginSyncedGame(room, forced = false) {
+  const sync = room?.gameStartSync;
+  if (!room || !sync || sync.displaySent) return false;
+  sync.displaySent = true;
+  const token = sync.token;
+  if (sync.readyTimeoutTimer) {
+    clearTimeout(sync.readyTimeoutTimer);
+    sync.readyTimeoutTimer = null;
+  }
+  clearStartCountdown(room);
+  beginGame(room, { emitRoomStateAfterStart: false });
+  emitGameDisplayNow(room, token, forced);
+  clearGameStartSync(room);
+  emitLobbyState();
+  return true;
+}
+
+function tryCompleteGameStart(room) {
+  const sync = room?.gameStartSync;
+  if (!sync || !sync.countdownDone) return false;
+  if (!areGameStartTargetsReady(room)) return false;
+  return beginSyncedGame(room, false);
+}
+
+function finishStartCountdown(room, token) {
+  const sync = room?.gameStartSync;
+  if (!room || !sync || sync.token !== token || sync.displaySent) return;
+
+  const reason = getStartBlockReason(room, { ignoreCountdown: true });
+  if (reason) {
+    cancelStartCountdown(room, reason);
+    return;
+  }
+
+  sync.countdownDone = true;
+  sync.waitingSince = Date.now();
+  if (tryCompleteGameStart(room)) return;
+
+  emitGameStartWaiting(room, true);
+  sync.readyTimeoutTimer = setTimeout(() => {
+    const liveRoom = rooms.get(room.id);
+    if (!liveRoom?.gameStartSync || liveRoom.gameStartSync.token !== token || liveRoom.gameStartSync.displaySent) return;
+    logEvent("Game start forced", `${liveRoom.title} / token=${token}`);
+    beginSyncedGame(liveRoom, true);
+  }, GAME_START_READY_TIMEOUT_MS);
 }
 
 function startGameCountdown(room) {
@@ -855,27 +990,35 @@ function startGameCountdown(room) {
   if (reason) return reason;
 
   const now = Date.now();
+  const token = createGameStartToken(room);
   clearStartCountdown(room);
+  clearGameStartSync(room);
+  room.starting = true;
   room.startCountdown = {
     startedAt: now,
     endsAt: now + START_COUNTDOWN_MS,
     totalMs: START_COUNTDOWN_MS,
     timer: null,
   };
+  room.gameStartSync = {
+    token,
+    readySocketIds: new Set(),
+    targetSocketIds: new Set(),
+    countdownDone: false,
+    waitingSince: 0,
+    readyTimeoutTimer: null,
+    displaySent: false,
+  };
+  refreshGameStartTargets(room);
   logEvent("Start countdown", room.title);
   emitRoomState(room);
   emitLobbyState();
+  emitGameStartPrepare(room);
 
   room.startCountdown.timer = setTimeout(() => {
     const liveRoom = rooms.get(room.id);
     if (!liveRoom || liveRoom.status !== "waiting") return;
-    const liveReason = getStartBlockReason(liveRoom, { ignoreCountdown: true });
-    if (liveReason) {
-      cancelStartCountdown(liveRoom, liveReason);
-      return;
-    }
-    clearStartCountdown(liveRoom);
-    beginGame(liveRoom);
+    finishStartCountdown(liveRoom, token);
   }, START_COUNTDOWN_MS);
   return "";
 }
@@ -900,6 +1043,11 @@ function removeHumanFromRoom(room, player, reason = "leave") {
   if (countdownWasActive && getStartBlockReason(room, { ignoreCountdown: true })) {
     cancelStartCountdown(room, "start condition changed");
     return;
+  }
+  if (countdownWasActive && room.gameStartSync) {
+    refreshGameStartTargets(room);
+    if (tryCompleteGameStart(room)) return;
+    emitGameStartWaiting(room, true);
   }
   emitRoomState(room);
   emitLobbyState();
@@ -980,6 +1128,7 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
 
 function clearRoomTimers(room) {
   clearStartCountdown(room);
+  clearGameStartSync(room);
   if (!room?.game) return;
   clearAITimers(room);
   if (room.game.resultTimer) clearTimeout(room.game.resultTimer);
@@ -1624,7 +1773,7 @@ function startTutorialPractice(room) {
   return true;
 }
 
-function beginGame(room) {
+function beginGame(room, { emitRoomStateAfterStart = true } = {}) {
   clearStartCountdown(room);
   room.status = "playing";
   room.statsEnabled = !room.isTutorial && !room.players.some((player) => player.isAI);
@@ -1676,7 +1825,7 @@ function beginGame(room) {
   }
 
   logEvent("Game started", room.title);
-  if (!room.isTutorial) emitRoomState(room);
+  if (!room.isTutorial && emitRoomStateAfterStart) emitRoomState(room);
   emitGameState(room);
   if (!room.isTutorial) scheduleAI(room);
 }
@@ -2164,6 +2313,25 @@ io.on("connection", (socket) => {
       else emitRoomState(room);
     }
     emitLobbyState(socket);
+  });
+
+  socket.on("clientGameReady", ({ roomId, token } = {}) => {
+    const { room, player } = getSocketRoomAndPlayer(socket);
+    const sync = room?.gameStartSync;
+    if (!room || !player || player.isAI || player.spectator || !sync) return;
+    if (String(room.id) !== String(roomId || "") || sync.token !== String(token || "")) return;
+    const targetIds = refreshGameStartTargets(room);
+    if (!targetIds.has(socket.id)) return;
+    const alreadyReady = sync.readySocketIds.has(socket.id);
+    sync.readySocketIds.add(socket.id);
+    if (!alreadyReady) logEvent("Game client ready", `${player.nickname} / ${room.title}`);
+    if (sync.countdownDone) {
+      if (!tryCompleteGameStart(room)) socket.emit("gameStartWaiting", {
+        ...serializeGameStartSync(room),
+        waitingSince: sync.waitingSince || Date.now(),
+        message: "다른 플레이어의 화면을 준비하고 있습니다.",
+      });
+    }
   });
 
   socket.on("startTutorial", () => {
