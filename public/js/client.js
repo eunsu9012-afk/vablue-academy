@@ -97,6 +97,7 @@ const FLIP_ALREADY_OPENED_MESSAGE = "이미 이번 턴의 카드를 오픈했습
 const FLIP_NOT_STARTED_MESSAGE = "게임이 시작되면 카드를 오픈할 수 있습니다.";
 const FLIP_NOT_OWN_CARD_MESSAGE = "내 카드만 오픈할 수 있습니다.";
 const WAITING_DELAY_MESSAGE = "다른 플레이어의 연결이 지연되고 있습니다.";
+const TOAST_DISPLAY_MS = 1000;
 const STATUS_ICONS = {
   lobby: "🔵",
   waiting: "🟢",
@@ -359,14 +360,14 @@ function showScreen(name) {
   updateMobileMode();
 }
 
-function showToast(message, type = "info", durationMs = 2200) {
+function showToast(message, type = "info") {
   const toast = $("#toast");
   if (!toast || !message) return;
   toast.textContent = message;
   toast.dataset.type = type;
   toast.classList.remove("hidden");
   clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => toast.classList.add("hidden"), durationMs);
+  showToast.timer = setTimeout(() => toast.classList.add("hidden"), TOAST_DISPLAY_MS);
 }
 
 function hasFinalConsonant(text) {
@@ -455,7 +456,7 @@ function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
 
 function showFlipUnavailableReason(options = {}) {
   const reason = getFlipUnavailableReason(state.game, options);
-  if (reason) showToast(reason, "warning", 3000);
+  if (reason) showToast(reason, "warning");
 }
 
 async function requestFlipCard({ showReason = false, ownDeck = true } = {}) {
@@ -2757,7 +2758,7 @@ async function handleMobileGameBoardTouch(event) {
   if (flipReason) {
     mobileTouchLastAt = now;
     event.preventDefault();
-    showToast(flipReason, "warning", 3000);
+    showToast(flipReason, "warning");
   }
 }
 
@@ -3117,7 +3118,6 @@ function renderGameResult(result) {
   return `
     <div class="result-box result-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
       <header class="result-header">
-        <span class="result-label">Game Result</span>
         <h2 id="resultTitle" class="result-title">🏆 게임 결과</h2>
         <p class="result-subtitle">모든 플레이어의 최종 점수와 순위가 결정되었습니다.</p>
       </header>
@@ -3360,7 +3360,7 @@ $("#readyButton").addEventListener("click", () => socket.emit("toggleReady"));
 $("#addAIButton").addEventListener("click", () => {
   const reason = getAIAddBlockReason();
   if (reason) {
-    showToast(reason, "warning", 3200);
+    showToast(reason, "warning");
     return;
   }
   socket.emit("addAI");
@@ -3553,7 +3553,7 @@ socket.on("errorMessage", (message) => {
   const displayMessage = String(message || "").includes("AI") && String(message || "").includes("준비")
     ? AI_READY_BLOCK_MESSAGE
     : message;
-  showToast(displayMessage, "warning", 3200);
+  showToast(displayMessage, "warning");
   if (!$("#createRoomModal").classList.contains("hidden")) $("#createError").textContent = displayMessage;
 });
 
