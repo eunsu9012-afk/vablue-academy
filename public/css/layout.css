@@ -132,10 +132,11 @@ main {
 }
 
 .emote-toolbar.hidden,
+body:not(.is-room-screen) .emote-toolbar,
 body.is-nickname-screen .emote-toolbar,
 body.is-lobby-screen .emote-toolbar,
 body.is-tutorial-screen .emote-toolbar,
-body.is-game-screen.is-tutorial-game .emote-toolbar,
+body.is-game-screen .emote-toolbar,
 body.is-result-overlay-open .emote-toolbar {
   display: none;
 }
@@ -148,15 +149,17 @@ body.is-result-overlay-open .emote-toolbar {
 
 .emote-button {
   display: inline-grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   width: 36px;
-  height: 36px;
+  height: 46px;
   place-items: center;
   overflow: hidden;
   border: 1px solid rgba(111, 159, 255, 0.28);
-  border-radius: 999px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 6px 14px rgba(35, 83, 160, 0.12);
   cursor: pointer;
+  padding: 3px 2px 4px;
   transition:
     transform 140ms ease,
     opacity 140ms ease,
@@ -180,10 +183,19 @@ body.is-result-overlay-open .emote-toolbar {
 
 .emote-button img {
   display: block;
-  width: 84%;
-  height: 84%;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   pointer-events: none;
+}
+
+.emote-hotkey-label {
+  color: var(--bb-text-muted);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+  text-transform: lowercase;
 }
 
 .emote-button.image-missing img {
@@ -343,6 +355,18 @@ body.is-game-screen .screen-game {
   .emote-button {
     width: 30px;
     height: 30px;
+    grid-template-rows: 1fr;
+    border-radius: 999px;
+    padding: 0;
+  }
+
+  .emote-button img {
+    width: 84%;
+    height: 84%;
+  }
+
+  .emote-hotkey-label {
+    display: none;
   }
 
   .screen,

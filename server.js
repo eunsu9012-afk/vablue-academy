@@ -59,8 +59,8 @@ const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY
 const ASSETS_NOT_READY_MESSAGE = "게임 자료 확인이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
-const EMOTE_DISPLAY_MS = 2000;
-const EMOTE_COOLDOWN_MS = 2000;
+const EMOTE_DISPLAY_MS = 1000;
+const EMOTE_COOLDOWN_MS = 1000;
 const EMOTES = {
   heung: { label: "흥" },
   ing: { label: "잉" },
@@ -2656,7 +2656,7 @@ io.on("connection", (socket) => {
 
     const now = Date.now();
     if (now - Number(player.lastEmoteAt || 0) < EMOTE_COOLDOWN_MS) {
-      socket.emit("emoteError", { message: "이모티콘은 2초에 한 번 사용할 수 있습니다." });
+      socket.emit("emoteError", { message: "이모티콘은 1초에 한 번 사용할 수 있습니다." });
       return;
     }
 

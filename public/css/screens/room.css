@@ -739,7 +739,7 @@
     grid-template-rows: auto auto;
     justify-items: stretch;
     align-items: center;
-    min-height: 72px;
+    min-height: 78px;
     border-radius: 15px;
     gap: 3px 6px;
     padding: 7px;
@@ -775,21 +775,18 @@
   .room-slot-copy {
     grid-column: 3;
     grid-row: 1;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    display: block;
     align-self: end;
+    min-width: 0;
   }
 
   .room-slot-name {
-    order: 2;
-    flex: 1 1 auto;
+    display: block;
     min-width: 0;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .room-slot-subtitle {
-    order: 1;
     flex: 0 0 auto;
     border: 1px solid rgba(111, 159, 255, 0.26);
     border-radius: 999px;
@@ -823,9 +820,8 @@
     align-self: center;
   }
 
-  .room-player-slot.empty-slot .room-slot-subtitle {
-    color: var(--bb-text-muted);
-    background: rgba(245, 249, 255, 0.82);
+  .room-player-slot.empty-slot .room-slot-meta-line {
+    display: none;
   }
 
   .room-emote-bubble {
@@ -895,17 +891,34 @@
 
   .room-player-slot,
   .waiting-player {
-    min-height: 72px;
-    padding: 7px;
+    grid-template-columns: 22px 32px minmax(0, 1fr);
+    min-height: 76px;
+    gap: 3px;
+    padding: 6px;
+  }
+
+  .room-slot-corner span {
+    width: 22px;
+    height: 20px;
+    font-size: 9px;
   }
 
   .room-slot-avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .room-slot-name {
+    font-size: 12px;
+  }
+
+  .room-slot-subtitle {
+    padding-inline: 4px;
+    font-size: 8px;
   }
 
   .room-slot-badge {
-    font-size: 9px;
-    padding-inline: 5px;
+    font-size: 8px;
+    padding-inline: 4px;
   }
 }
