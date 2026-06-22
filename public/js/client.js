@@ -656,13 +656,17 @@ function requestBell() {
   socket.emit("ringBell");
 }
 
+function getFlipAllowedAt(game = state.game) {
+  return Number(game?.turnCanOpenAt || game?.nextFlipAllowedAt || 0);
+}
+
 function isFlipAvailable(game = state.game) {
   if (!state.assetsReady) return false;
   if (!isSelfAbleToAct(game)) return false;
   if (isFlipRequestPendingForTurn(game)) return false;
   const self = getSelfPlayer(game);
   if (self?.id !== game.currentTurnPlayerId) return false;
-  return Date.now() >= Number(game.nextFlipAllowedAt || 0);
+  return Date.now() >= getFlipAllowedAt(game);
 }
 
 function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
@@ -675,7 +679,7 @@ function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
   if (!self || self.spectator || self.eliminated) return "현재는 카드를 오픈할 수 없습니다.";
   if (game.bellLocked) return "종 판정 중입니다. 잠시 후 조작할 수 있습니다.";
   if (self.id !== game.currentTurnPlayerId) return FLIP_NOT_TURN_MESSAGE;
-  if (Date.now() < Number(game.nextFlipAllowedAt || 0)) return FLIP_WAITING_MESSAGE;
+  if (Date.now() < getFlipAllowedAt(game)) return FLIP_WAITING_MESSAGE;
   return "";
 }
 
@@ -712,7 +716,7 @@ function scheduleFlipAvailabilityRefresh(game = state.game) {
   const self = getSelfPlayer(game);
   if (!game || !self || self.spectator || self.eliminated || game.bellLocked) return;
   if (self.id !== game.currentTurnPlayerId) return;
-  const remaining = Number(game.nextFlipAllowedAt || 0) - Date.now();
+  const remaining = getFlipAllowedAt(game) - Date.now();
   if (remaining <= 0) return;
   const roomId = game.roomId;
   const turnPlayerId = game.currentTurnPlayerId;
@@ -1544,7 +1548,7 @@ function normalizeStartCountdownTiming(countdown) {
   const now = Date.now();
   const totalMs = Number(countdown.totalMs || countdown.countdownMs || 3000);
   const rawStartedAt = Number(countdown.startedAt || 0);
-  const rawEndsAt = Number(countdown.endsAt || countdown.startAt || 0);
+  const rawEndsAt = Number(countdown.countdownEndsAt || countdown.endsAt || countdown.startAt || 0);
   const serverNow = Number(countdown.serverNow || 0);
   let startedAt = rawStartedAt;
   let endsAt = rawEndsAt;
@@ -1568,6 +1572,31 @@ function normalizeStartCountdownTiming(countdown) {
   };
 }
 
+function normalizeServerTimestamp(timestamp, serverNow = 0) {
+  const value = Number(timestamp || 0);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (Number.isFinite(serverClockOffsetMs)) return value - serverClockOffsetMs;
+
+  const serverNowValue = Number(serverNow || 0);
+  if (Number.isFinite(serverNowValue) && serverNowValue > 0) {
+    return Date.now() + (value - serverNowValue);
+  }
+
+  return value;
+}
+
+function normalizeGameTiming(game) {
+  if (!game) return game;
+  const serverNow = Number(game.serverNow || 0);
+  const turnCanOpenAt = normalizeServerTimestamp(game.turnCanOpenAt || game.nextFlipAllowedAt, serverNow);
+  return {
+    ...game,
+    nextFlipAllowedAt: turnCanOpenAt,
+    turnCanOpenAt,
+    turnEndsAt: normalizeServerTimestamp(game.turnEndsAt, serverNow),
+  };
+}
+
 async function prepareGameStart(payload) {
   if (!payload?.roomId || !payload?.token) return;
   const token = String(payload.token);
@@ -1585,8 +1614,9 @@ async function prepareGameStart(payload) {
   pendingPreGameState = null;
   updateStartCountdownOverlay(normalizeStartCountdownTiming({
     startedAt: payload.startedAt,
+    countdownEndsAt: payload.countdownEndsAt,
     endsAt: payload.startAt,
-    totalMs: payload.countdownMs || 3000,
+    totalMs: payload.countdownDurationMs || payload.countdownMs || 3000,
     serverNow: payload.serverNow,
   }));
 
@@ -3772,14 +3802,15 @@ socket.on("gameDisplayNow", (payload) => {
 
 socket.on("gameState", async (payload) => {
   if (!payload) return;
+  const game = normalizeGameTiming(payload);
   await ensureAssetsReady();
-  if (!payload.isTutorial && state.gameStartSync && String(state.gameStartSync.roomId) === String(payload.roomId)) {
-    pendingPreGameState = payload;
+  if (!game.isTutorial && state.gameStartSync && String(state.gameStartSync.roomId) === String(game.roomId)) {
+    pendingPreGameState = game;
     if (state.gameStartSync.displayAllowed) renderPendingGameStartState();
     return;
   }
-  if (shouldDelayGameScreenForPreGameCountdown(payload)) {
-    pendingPreGameState = payload;
+  if (shouldDelayGameScreenForPreGameCountdown(game)) {
+    pendingPreGameState = game;
     await runPreGameCountdown();
     const nextGameState = pendingPreGameState;
     pendingPreGameState = null;
@@ -3787,7 +3818,7 @@ socket.on("gameState", async (payload) => {
     renderGame(nextGameState);
     return;
   }
-  renderGame(payload);
+  renderGame(game);
 });
 
 socket.on("roomPasswordError", (payload) => {

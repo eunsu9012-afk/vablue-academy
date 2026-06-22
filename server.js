@@ -60,7 +60,8 @@ const PENALTY_MULTIPLIERS = new Set([1, 2, 3]);
 const TURN_TIME_OPTIONS = new Set([6, 8, 10]);
 const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
-const POST_CARD_OPEN_TURN_DELAY_MS = 100;
+const HUMAN_TURN_ACTIVATION_DELAY_MS = 100;
+const POST_CARD_OPEN_TURN_DELAY_MS = HUMAN_TURN_ACTIVATION_DELAY_MS;
 const AI_CARD_READ_HOLD_MS = 600;
 const AI_POST_CARD_OPEN_TURN_DELAY_MS = AI_CARD_READ_HOLD_MS;
 const START_COUNTDOWN_MS = 3000;
@@ -516,6 +517,8 @@ function serializeCountdown(room, serverNow = Date.now()) {
     startedAt: room.startCountdown.startedAt,
     endsAt: room.startCountdown.endsAt,
     totalMs: room.startCountdown.totalMs || START_COUNTDOWN_MS,
+    countdownEndsAt: room.startCountdown.endsAt,
+    countdownDurationMs: room.startCountdown.totalMs || START_COUNTDOWN_MS,
     serverNow,
   };
 }
@@ -665,6 +668,7 @@ function serializeCard(card) {
 
 function serializeGame(room, selfPlayerId = null) {
   const game = room.game;
+  const serverNow = Date.now();
   return {
     roomId: room.id,
     title: room.title,
@@ -683,7 +687,10 @@ function serializeGame(room, selfPlayerId = null) {
     turnEndsAt: game?.turnEndsAt || 0,
     turnDurationMs: getTurnDurationMs(room),
     nextFlipAllowedAt: game?.nextFlipAllowedAt || 0,
+    turnCanOpenAt: game?.nextFlipAllowedAt || 0,
     turnStartDelayMs: TURN_START_DELAY_MS,
+    humanTurnActivationDelayMs: HUMAN_TURN_ACTIVATION_DELAY_MS,
+    serverNow,
     bellLocked: Boolean(game?.bellLocked),
     matchedCharacters: game?.matchedCharacters || [],
     wrongFlash: Boolean(game?.wrongFlash),
@@ -734,12 +741,16 @@ function createGameStartToken(room) {
 function serializeGameStartSync(room) {
   const serverNow = Date.now();
   const countdown = serializeCountdown(room, serverNow);
+  const countdownMs = countdown?.totalMs || START_COUNTDOWN_MS;
+  const startAt = countdown?.endsAt || serverNow + START_COUNTDOWN_MS;
   return {
     roomId: room.id,
     token: room.gameStartSync?.token || "",
-    countdownMs: countdown?.totalMs || START_COUNTDOWN_MS,
+    countdownMs,
+    countdownDurationMs: countdownMs,
     startedAt: countdown?.startedAt || serverNow,
-    startAt: countdown?.endsAt || serverNow + START_COUNTDOWN_MS,
+    startAt,
+    countdownEndsAt: startAt,
     serverNow,
   };
 }
@@ -1633,14 +1644,14 @@ function getPostCardOpenTurnDelayMs(nextPlayer) {
     : AI_POST_CARD_OPEN_TURN_DELAY_MS;
 }
 
-function setCurrentTurn(room, playerId) {
+function setCurrentTurn(room, playerId, { humanActivationDelayMs = HUMAN_TURN_ACTIVATION_DELAY_MS } = {}) {
   if (!room?.game || !playerId) return;
   clearRevealTimer(room);
   clearTurnTimer(room);
   const now = Date.now();
   const turnDurationMs = getTurnDurationMs(room);
   const player = findPlayer(room, playerId);
-  const turnStartDelayMs = player?.isAI ? TURN_START_DELAY_MS : 0;
+  const turnStartDelayMs = player?.isAI ? TURN_START_DELAY_MS : humanActivationDelayMs;
   const nextFlipAllowedAt = now + turnStartDelayMs;
   room.game.currentTurnPlayerId = playerId;
   room.game.turnStartedAt = now;
@@ -1933,7 +1944,7 @@ function handleFlipCard(room, player) {
       if (liveRoom.isTutorial && liveRoom.tutorialPhase !== "practice") {
         setTutorialInstructionTurn(liveRoom, nextPlayerId);
       } else {
-        setCurrentTurn(liveRoom, nextPlayerId);
+        setCurrentTurn(liveRoom, nextPlayerId, { humanActivationDelayMs: 0 });
       }
       emitGameState(liveRoom);
       if (!liveRoom.isTutorial || liveRoom.tutorialPhase === "practice") scheduleAI(liveRoom);
