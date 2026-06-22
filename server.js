@@ -62,6 +62,7 @@ const DEFAULT_TURN_TIME = 6;
 const TURN_START_DELAY_MS = 600;
 const POST_CARD_OPEN_TURN_DELAY_MS = 100;
 const AI_CARD_READ_HOLD_MS = 600;
+const AI_POST_CARD_OPEN_TURN_DELAY_MS = AI_CARD_READ_HOLD_MS;
 const START_COUNTDOWN_MS = 3000;
 const GAME_START_READY_TIMEOUT_MS = 10000;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
@@ -509,12 +510,13 @@ function getStartBlockReason(room, { ignoreCountdown = false } = {}) {
   return "";
 }
 
-function serializeCountdown(room) {
+function serializeCountdown(room, serverNow = Date.now()) {
   if (!room?.startCountdown) return null;
   return {
     startedAt: room.startCountdown.startedAt,
     endsAt: room.startCountdown.endsAt,
     totalMs: room.startCountdown.totalMs || START_COUNTDOWN_MS,
+    serverNow,
   };
 }
 
@@ -730,13 +732,15 @@ function createGameStartToken(room) {
 }
 
 function serializeGameStartSync(room) {
-  const countdown = serializeCountdown(room);
+  const serverNow = Date.now();
+  const countdown = serializeCountdown(room, serverNow);
   return {
     roomId: room.id,
     token: room.gameStartSync?.token || "",
     countdownMs: countdown?.totalMs || START_COUNTDOWN_MS,
-    startedAt: countdown?.startedAt || Date.now(),
-    startAt: countdown?.endsAt || Date.now() + START_COUNTDOWN_MS,
+    startedAt: countdown?.startedAt || serverNow,
+    startAt: countdown?.endsAt || serverNow + START_COUNTDOWN_MS,
+    serverNow,
   };
 }
 
@@ -1623,6 +1627,12 @@ function clearRevealTimer(room) {
   if (room?.game) room.game.revealTimer = null;
 }
 
+function getPostCardOpenTurnDelayMs(nextPlayer) {
+  return nextPlayer && !nextPlayer.isAI
+    ? POST_CARD_OPEN_TURN_DELAY_MS
+    : AI_POST_CARD_OPEN_TURN_DELAY_MS;
+}
+
 function setCurrentTurn(room, playerId) {
   if (!room?.game || !playerId) return;
   clearRevealTimer(room);
@@ -1887,11 +1897,13 @@ function handleFlipCard(room, player) {
   const nextPlayerId = room.isTutorial && room.tutorialPhase !== "practice"
     ? player.id
     : nextAlivePlayerId(room, player.id);
+  const scheduledNextPlayer = nextPlayerId ? findPlayer(room, nextPlayerId) : null;
+  const postCardOpenTurnDelayMs = getPostCardOpenTurnDelayMs(scheduledNextPlayer);
   clearTurnTimer(room);
   room.game.currentTurnPlayerId = null;
   room.game.turnStartedAt = openedAt;
   room.game.turnEndsAt = 0;
-  room.game.nextFlipAllowedAt = openedAt + POST_CARD_OPEN_TURN_DELAY_MS;
+  room.game.nextFlipAllowedAt = openedAt + postCardOpenTurnDelayMs;
   room.game.turnSerial = (room.game.turnSerial || 0) + 1;
   room.game.lastCardOpenedAt = openedAt;
   room.game.lastOpenedCardId = openedCard.cardId;
@@ -1926,7 +1938,7 @@ function handleFlipCard(room, player) {
       emitGameState(liveRoom);
       if (!liveRoom.isTutorial || liveRoom.tutorialPhase === "practice") scheduleAI(liveRoom);
     }
-  }, POST_CARD_OPEN_TURN_DELAY_MS);
+  }, postCardOpenTurnDelayMs);
   return true;
 }
 

@@ -187,6 +187,7 @@ let gameStartWaitingNoticeTimer = null;
 let pendingPreGameState = null;
 let startGameRequestPending = false;
 let latencyNonce = 0;
+let serverClockOffsetMs = null;
 let mobileTouchLastAt = 0;
 let emoteCooldownUntil = 0;
 let emoteCooldownTimer = null;
@@ -1538,6 +1539,35 @@ function emitClientGameReady(payload) {
   socket.emit("clientGameReady", { roomId: payload.roomId, token: payload.token });
 }
 
+function normalizeStartCountdownTiming(countdown) {
+  if (!countdown) return null;
+  const now = Date.now();
+  const totalMs = Number(countdown.totalMs || countdown.countdownMs || 3000);
+  const rawStartedAt = Number(countdown.startedAt || 0);
+  const rawEndsAt = Number(countdown.endsAt || countdown.startAt || 0);
+  const serverNow = Number(countdown.serverNow || 0);
+  let startedAt = rawStartedAt;
+  let endsAt = rawEndsAt;
+
+  if (Number.isFinite(rawEndsAt) && rawEndsAt > 0) {
+    if (Number.isFinite(serverClockOffsetMs)) {
+      endsAt = rawEndsAt - serverClockOffsetMs;
+      if (Number.isFinite(rawStartedAt) && rawStartedAt > 0) startedAt = rawStartedAt - serverClockOffsetMs;
+    } else if (Number.isFinite(serverNow) && serverNow > 0) {
+      endsAt = now + Math.max(0, rawEndsAt - serverNow);
+      if (Number.isFinite(rawStartedAt) && rawStartedAt > 0) {
+        startedAt = endsAt - Math.max(0, rawEndsAt - rawStartedAt);
+      }
+    }
+  }
+
+  return {
+    startedAt: Number.isFinite(startedAt) && startedAt > 0 ? startedAt : now,
+    endsAt: Number.isFinite(endsAt) && endsAt > 0 ? endsAt : now,
+    totalMs: Number.isFinite(totalMs) && totalMs > 0 ? totalMs : 3000,
+  };
+}
+
 async function prepareGameStart(payload) {
   if (!payload?.roomId || !payload?.token) return;
   const token = String(payload.token);
@@ -1553,11 +1583,12 @@ async function prepareGameStart(payload) {
   }
   state.gameInteractive = false;
   pendingPreGameState = null;
-  updateStartCountdownOverlay({
+  updateStartCountdownOverlay(normalizeStartCountdownTiming({
     startedAt: payload.startedAt,
     endsAt: payload.startAt,
     totalMs: payload.countdownMs || 3000,
-  });
+    serverNow: payload.serverNow,
+  }));
 
   await ensureAssetsReady();
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -2479,7 +2510,7 @@ function renderRoom(room) {
   showScreen("room");
   setText("#roomTitle", room.title);
   updateRoomSummary(room);
-  updateStartCountdownOverlay(room.countdown || null);
+  updateStartCountdownOverlay(normalizeStartCountdownTiming(room.countdown));
 
   const self = room.players.find((player) => player.id === room.selfPlayerId);
   const isHost = self?.id === room.hostId;
@@ -3794,7 +3825,13 @@ socket.on("latencyPong", (payload) => {
   const startedAt = pendingLatencyPings.get(payload?.nonce);
   if (!startedAt) return;
   pendingLatencyPings.delete(payload.nonce);
-  state.latency = { value: Date.now() - startedAt, state: "ok" };
+  const receivedAt = Date.now();
+  const roundTripMs = receivedAt - startedAt;
+  const serverTime = Number(payload.serverTime);
+  if (Number.isFinite(serverTime)) {
+    serverClockOffsetMs = serverTime - (startedAt + roundTripMs / 2);
+  }
+  state.latency = { value: roundTripMs, state: "ok" };
   renderLatency();
 });
 
