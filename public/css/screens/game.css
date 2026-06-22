@@ -33,6 +33,51 @@ body.is-game-screen #gameHud.hidden {
   display: none;
 }
 
+.mobile-control-hand-toggle {
+  display: none;
+}
+
+body.is-game-screen.is-mobile .mobile-control-hand-toggle:not(.hidden) {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  width: min(34vw, 132px);
+  min-width: 112px;
+  min-height: 34px;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.36);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 6px 14px rgba(35, 83, 160, 0.1);
+}
+
+body.is-result-overlay-open .mobile-control-hand-toggle,
+body:not(.is-game-screen) .mobile-control-hand-toggle,
+body:not(.is-mobile) .mobile-control-hand-toggle,
+body.is-tutorial-game .mobile-control-hand-toggle {
+  display: none;
+}
+
+.mobile-control-hand-button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bb-text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  padding: 0 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mobile-control-hand-button.is-active,
+.mobile-control-hand-button[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--bb-blue-600), var(--bb-blue-800));
+  color: #fff;
+}
+
 body.is-game-screen #gameHud .badge,
 body.is-game-screen #turnTimer {
   display: inline-flex;
@@ -662,7 +707,7 @@ body.is-game-screen #gameScreen .deck-card {
 
 body.is-game-screen #gameScreen .deck-card[aria-disabled="true"] {
   opacity: 0.62;
-  cursor: help;
+  cursor: default;
 }
 
 body.is-game-screen #gameScreen .deck-card img {
@@ -675,6 +720,28 @@ body.is-game-screen #gameScreen .deck-card img {
 body.is-game-screen #gameScreen .deck-card.clickable {
   cursor: pointer;
   box-shadow: 0 0 0 3px rgba(30, 107, 255, 0.17), 0 8px 18px rgba(13, 53, 145, 0.18);
+}
+
+body.is-game-screen #gameScreen .player-zone.current-turn .deck-card {
+  border-color: rgba(70, 130, 255, 0.78);
+  animation: deckTurnGlow 1.1s ease-in-out infinite;
+}
+
+@keyframes deckTurnGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(70, 130, 255, 0.35),
+      0 0 12px rgba(70, 130, 255, 0.25),
+      0 8px 18px rgba(13, 53, 145, 0.16);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(70, 130, 255, 0.72),
+      0 0 22px rgba(70, 130, 255, 0.42),
+      0 8px 18px rgba(13, 53, 145, 0.18);
+  }
 }
 
 body.is-game-screen #gameScreen .empty-card-space {
@@ -717,19 +784,6 @@ body.is-game-screen #gameScreen .character-piece.image-loaded .character-fallbac
 
 body.is-game-screen #gameScreen .character-piece.highlighted {
   filter: drop-shadow(0 0 8px rgba(246, 183, 53, 0.72));
-}
-
-body.is-game-screen #gameScreen .player-zone.current-turn .player-card-shell {
-  border-color: var(--bb-line-strong);
-  box-shadow: 0 0 0 3px rgba(30, 107, 255, 0.13), 0 12px 24px rgba(35, 83, 160, 0.16);
-}
-
-body.is-game-screen #gameScreen .player-zone.current-turn .player-card-shell::after {
-  content: "";
-  display: block;
-  height: 3px;
-  border-radius: var(--bb-radius-pill);
-  background: linear-gradient(90deg, transparent, var(--bb-blue-500), transparent);
 }
 
 body.is-game-screen #gameScreen .player-zone.eliminated {
@@ -1248,10 +1302,10 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen .topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "brand menu"
-      "hud hud";
+      "brand hand menu"
+      "hud hud hud";
     gap: 8px;
     min-height: var(--bb-mobile-header-h);
     padding: calc(var(--bb-safe-top) + 7px) 10px 8px;
@@ -1274,6 +1328,12 @@ body.is-game-screen #mobileBoardStats {
     grid-area: menu;
     min-width: 44px;
     min-height: 44px;
+  }
+
+  body.is-game-screen #mobileControlHandToggle {
+    grid-area: hand;
+    align-self: center;
+    justify-self: end;
   }
 
   body.is-game-screen #gameHud {
@@ -1325,6 +1385,23 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen #mobileBoardStats.hidden {
     display: none;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-controls {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-controls[data-control-hand="left"] .mobile-game-action-column,
+  body.is-game-screen #mobileBoardStats .mobile-game-controls[data-control-hand="right"] .mobile-game-info-column {
+    order: 1;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-controls[data-control-hand="left"] .mobile-game-info-column,
+  body.is-game-screen #mobileBoardStats .mobile-game-controls[data-control-hand="right"] .mobile-game-action-column {
+    order: 2;
   }
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary {
@@ -1413,13 +1490,20 @@ body.is-game-screen #mobileBoardStats {
   }
 
   body.is-game-screen #mobileBoardStats {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: repeat(2, minmax(52px, 1fr));
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
     align-items: stretch;
     gap: 6px;
     height: clamp(118px, 15.5vh, 132px);
     max-height: 132px;
     padding: 6px;
+  }
+
+  body.is-game-screen #mobileBoardStats .mobile-game-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 6px;
+    height: 100%;
   }
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary,
@@ -1431,13 +1515,13 @@ body.is-game-screen #mobileBoardStats {
   }
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary {
-    grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-column: auto;
+    grid-row: auto;
   }
 
   body.is-game-screen #mobileBoardStats .mobile-game-actions {
-    grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-column: auto;
+    grid-row: auto;
   }
 
   body.is-game-screen #mobileBoardStats .mobile-board-summary > div {
@@ -1588,8 +1672,19 @@ body.is-game-screen #mobileBoardStats {
     --bb-mobile-header-h: 108px;
   }
 
+  body.is-game-screen.is-mobile .mobile-control-hand-toggle:not(.hidden) {
+    width: 104px;
+    min-width: 104px;
+    min-height: 32px;
+  }
+
+  .mobile-control-hand-button {
+    font-size: 10px;
+    padding-inline: 4px;
+  }
+
   body.is-game-screen .brand span:last-child {
-    max-width: 170px;
+    max-width: 142px;
   }
 
   body.is-game-screen #gameHud {

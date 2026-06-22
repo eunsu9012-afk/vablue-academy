@@ -37,6 +37,7 @@ const BELL_IMAGE_URL = BELL_IMAGE_ASSET;
 const HIDDEN_USERS_KEY = "babyblue-hidden-users";
 const BGM_MODE_KEY = "bgmMode";
 const LOBBY_GUIDE_COLLAPSED_KEY = "lobbyGuideCollapsed";
+const CONTROL_HAND_STORAGE_KEY = "babyblue-control-hand";
 
 const CARD_SLOTS = {
   1: { left: "22%", top: "22%" },
@@ -123,6 +124,18 @@ const screens = {
   game: document.querySelector("#gameScreen"),
 };
 
+function normalizeControlHand(value) {
+  return value === "left" ? "left" : "right";
+}
+
+function readControlHandPreference() {
+  try {
+    return normalizeControlHand(localStorage.getItem(CONTROL_HAND_STORAGE_KEY));
+  } catch {
+    return "right";
+  }
+}
+
 const state = {
   nickname: "",
   fanCharacterId: DEFAULT_FAN_CHARACTER_ID,
@@ -138,6 +151,7 @@ const state = {
   mobileInfoRoomId: null,
   spectatorOverlayDismissedFor: null,
   latency: { value: null, state: "measuring" },
+  mobileControlHand: readControlHandPreference(),
   assetsReady: false,
   assetsLoading: false,
   assetLoadFailures: [],
@@ -538,6 +552,43 @@ function isMobileMode() {
   return window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
 }
 
+function isActualMobileGameScreen() {
+  return isMobileMode()
+    && state.activeScreen === "game"
+    && Boolean(state.game)
+    && !state.game.isTutorial
+    && !state.gameResult
+    && !document.body.classList.contains("is-result-overlay-open");
+}
+
+function saveControlHandPreference(hand) {
+  try {
+    localStorage.setItem(CONTROL_HAND_STORAGE_KEY, normalizeControlHand(hand));
+  } catch {}
+}
+
+function updateMobileControlHandUI() {
+  const hand = normalizeControlHand(state.mobileControlHand);
+  const controls = $("#mobileGameControls");
+  const toggle = $("#mobileControlHandToggle");
+  if (controls) controls.dataset.controlHand = hand;
+  if (!toggle) return;
+
+  const visible = isActualMobileGameScreen();
+  toggle.classList.toggle("hidden", !visible);
+  toggle.querySelectorAll("[data-control-hand]").forEach((button) => {
+    const active = button.dataset.controlHand === hand;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function setMobileControlHand(hand, { persist = true } = {}) {
+  state.mobileControlHand = normalizeControlHand(hand);
+  if (persist) saveControlHandPreference(state.mobileControlHand);
+  updateMobileControlHandUI();
+}
+
 function updateAppHeight() {
   document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
 }
@@ -565,7 +616,9 @@ function isBellAvailable(game = state.game) {
 }
 
 function requestBell() {
+  if (state.activeScreen !== "game" || !state.game) return;
   if (!state.gameInteractive && !state.game?.isTutorial) return;
+  if (!state.game.isTutorial && !isSelfAbleToAct(state.game)) return;
   socket.emit("ringBell");
 }
 
@@ -630,7 +683,7 @@ function scheduleFlipAvailabilityRefresh(game = state.game) {
     flipAvailabilityTimer = null;
     if (state.game?.roomId !== roomId || state.game?.currentTurnPlayerId !== turnPlayerId) return;
     renderGame(state.game);
-  }, remaining + 25);
+  }, remaining);
 }
 
 function updateMobileMode() {
@@ -638,6 +691,7 @@ function updateMobileMode() {
   ensureMobileLobbyAccordions();
   updateLobbyRankingPanelState();
   updateMobileGameInfoPanel();
+  updateMobileControlHandUI();
   updateMobileTouchHint();
 }
 
@@ -690,21 +744,24 @@ function ensureMobileGameInfoMarkup() {
   if (!root || root.dataset.enhanced === "true") return;
   root.dataset.enhanced = "true";
   root.innerHTML = `
-    <div class="mobile-board-summary">
-      <div class="mobile-recent-answer">
-        <span>최근 정답 TOP1</span>
-        <strong id="mobileReactionTop">-</strong>
+    <div id="mobileGameControls" class="mobile-game-controls" data-control-hand="${normalizeControlHand(state.mobileControlHand)}">
+      <div class="mobile-board-summary mobile-game-info-column">
+        <div class="mobile-recent-answer">
+          <span>최근 정답 TOP1</span>
+          <strong id="mobileReactionTop">-</strong>
+        </div>
+        <div class="mobile-server-latency">
+          <span>서버 응답속도</span>
+          <strong id="mobileLatencyValue">측정 중</strong>
+        </div>
       </div>
-      <div class="mobile-server-latency">
-        <span>서버 응답속도</span>
-        <strong id="mobileLatencyValue">측정 중</strong>
+      <div class="mobile-game-actions mobile-game-action-column" aria-label="모바일 게임 조작">
+        <button id="mobileBellButton" class="mobile-action-button mobile-bell-action" type="button">종치기</button>
+        <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action mobile-card-open-action" type="button">카드 오픈</button>
       </div>
-    </div>
-    <div class="mobile-game-actions" aria-label="모바일 게임 조작">
-      <button id="mobileBellButton" class="mobile-action-button mobile-bell-action" type="button">종치기</button>
-      <button id="mobileFlipButton" class="mobile-action-button mobile-flip-action mobile-card-open-action" type="button">카드 오픈</button>
     </div>
   `;
+  updateMobileControlHandUI();
   $("#mobileBellButton")?.addEventListener("click", (event) => {
     event.stopPropagation();
     requestBell();
@@ -742,6 +799,7 @@ function updateMobileGameInfoPanel() {
   if (mobileStats) {
     mobileStats.classList.toggle("hidden", !visible);
   }
+  updateMobileControlHandUI();
 
   if (!mobile) {
     panel.classList.remove("mobile-collapsed");
@@ -2598,7 +2656,8 @@ function syncDeckCard(deckSlot, canFlip, visible, ownDeck = false) {
   deck.classList.toggle("clickable", canFlip);
   deck.disabled = false;
   deck.setAttribute("aria-disabled", String(!canFlip));
-  deck.title = canFlip ? "카드 오픈" : getFlipUnavailableReason(state.game, { ownDeck });
+  deck.setAttribute("aria-label", canFlip ? "카드 오픈" : getFlipUnavailableReason(state.game, { ownDeck }));
+  deck.removeAttribute("title");
   deck.onclick = () => requestFlipCard({ showReason: true, ownDeck });
 }
 
@@ -2934,7 +2993,7 @@ function renderDeckCard(clickable) {
   card.type = "button";
   card.className = `deck-card ${clickable ? "clickable" : ""}`;
   card.disabled = !clickable;
-  card.title = "카드덱";
+  card.setAttribute("aria-label", "카드덱");
   const pattern = document.createElement("div");
   pattern.className = "deck-pattern";
   pattern.setAttribute("aria-hidden", "true");
@@ -3050,10 +3109,12 @@ function updateGameOverlay(game) {
   document.body.classList.remove("is-result-overlay-open");
   overlay.className = "result-overlay screen-result hidden";
   overlay.innerHTML = "";
+  updateMobileControlHandUI();
 
   if (state.gameResult) {
     const isFinishedResult = !state.gameResult.isTutorial;
     document.body.classList.toggle("is-result-overlay-open", isFinishedResult);
+    updateMobileControlHandUI();
     overlay.className = `result-overlay screen-result result-card ${isFinishedResult ? "result-finished-overlay" : ""}`;
     overlay.innerHTML = renderGameResult(state.gameResult);
     overlay.querySelector(".overlay-leave-button")?.addEventListener("click", () => socket.emit("leaveRoom"));
@@ -3527,6 +3588,9 @@ document.querySelectorAll(".emote-button").forEach((button) => {
   button.addEventListener("click", () => requestEmote(button.dataset.emoteId || ""));
   button.querySelector("img")?.addEventListener("error", () => button.classList.add("image-missing"), { once: true });
 });
+document.querySelectorAll("#mobileControlHandToggle [data-control-hand]").forEach((button) => {
+  button.addEventListener("click", () => setMobileControlHand(button.dataset.controlHand || "right"));
+});
 $("#bellButton").addEventListener("click", requestBell);
 $("#tutorialBackButton")?.addEventListener("click", goBackTutorialStep);
 $("#tutorialNextButton")?.addEventListener("click", advanceTutorialStep);
@@ -3603,7 +3667,7 @@ document.addEventListener("keydown", (event) => {
     closeSettingsPanel();
   }
   if (isFormFieldFocused()) return;
-  const emoteByKey = { a: "heung", b: "ing", c: "pup" };
+  const emoteByKey = { a: "heung", s: "ing", d: "pup" };
   const emoteId = emoteByKey[event.key?.toLowerCase?.()];
   if (state.activeScreen === "room" && emoteId) {
     event.preventDefault();
