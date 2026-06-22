@@ -122,6 +122,93 @@ main {
   object-fit: contain;
 }
 
+.emote-toolbar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.emote-toolbar.hidden,
+body.is-nickname-screen .emote-toolbar,
+body.is-lobby-screen .emote-toolbar,
+body.is-tutorial-screen .emote-toolbar,
+body.is-game-screen.is-tutorial-game .emote-toolbar,
+body.is-result-overlay-open .emote-toolbar {
+  display: none;
+}
+
+.emote-toolbar-label {
+  color: var(--bb-blue-900);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.emote-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(111, 159, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 14px rgba(35, 83, 160, 0.12);
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.emote-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(35, 83, 160, 0.16);
+}
+
+.emote-button:active {
+  transform: translateY(1px);
+}
+
+.emote-button.is-cooling,
+.emote-button[aria-disabled="true"] {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.emote-button img {
+  display: block;
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.emote-button.image-missing img {
+  display: none;
+}
+
+.emote-button.image-missing::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--bb-blue-300);
+}
+
+@keyframes emote-pop {
+  0% {
+    opacity: 0;
+    scale: 0.72;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
 .settings-panel {
   position: absolute;
   top: calc(100% + var(--bb-space-2));
@@ -221,6 +308,41 @@ body.is-game-screen .screen-game {
   .brand-mark {
     width: 38px;
     height: 38px;
+  }
+
+  body.is-room-screen .topbar,
+  body.is-game-screen .topbar {
+    gap: 6px;
+  }
+
+  body.is-room-screen .brand,
+  body.is-game-screen .brand {
+    flex: 1 1 auto;
+    gap: 5px;
+  }
+
+  body.is-room-screen .brand-mark,
+  body.is-game-screen .brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  body.is-room-screen .brand span:last-child,
+  body.is-game-screen .brand span:last-child {
+    font-size: 13px;
+  }
+
+  .emote-toolbar {
+    gap: 4px;
+  }
+
+  .emote-toolbar-label {
+    font-size: 11px;
+  }
+
+  .emote-button {
+    width: 30px;
+    height: 30px;
   }
 
   .screen,

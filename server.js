@@ -59,12 +59,17 @@ const AI_CARD_READ_DELAY_MS = Math.max(AI_MIN_BELL_REACTION_MS, TURN_START_DELAY
 const ASSETS_NOT_READY_MESSAGE = "게임 자료 확인이 끝난 뒤 다시 시도해 주세요.";
 const WIN_RANK_SYMBOLS = ["🏆", "🥈", "🥉"];
 const RATE_RANK_SYMBOLS = ["⭐", "✨", "💫"];
+const EMOTE_DISPLAY_MS = 2000;
+const EMOTE_COOLDOWN_MS = 2000;
 const EMOTES = {
-  "1": "웃음",
-  "2": "조롱",
-  "3": "화남",
-  "4": "울음",
-  "5": "방구",
+  heung: { label: "흥" },
+  ing: { label: "잉" },
+  pup: { label: "풉" },
+};
+const LEGACY_EMOTE_KEYS = {
+  "1": "heung",
+  "2": "ing",
+  "3": "pup",
 };
 
 const usersByNickname = new Map();
@@ -2642,17 +2647,34 @@ io.on("connection", (socket) => {
     handleBell(room, player);
   });
 
-  socket.on("sendEmote", ({ emote } = {}) => {
+  socket.on("sendEmote", ({ emoteId, emote } = {}) => {
     const { room, player } = getSocketRoomAndPlayer(socket);
-    const key = String(emote || "");
-    if (!room || !player || room.status !== "playing") return;
-    if (player.spectator || player.eliminated || !EMOTES[key]) return;
-    if (Date.now() - player.lastEmoteAt < 5000) return;
-    player.lastEmoteAt = Date.now();
-    io.to(room.id).emit("emoteEvent", {
+    const requestedId = String(emoteId || emote || "");
+    const key = LEGACY_EMOTE_KEYS[requestedId] || requestedId;
+    if (!room || !player || room.isTutorial || room.status === "finished") return;
+    if (player.isAI || player.spectator || player.eliminated || !EMOTES[key]) return;
+
+    const now = Date.now();
+    if (now - Number(player.lastEmoteAt || 0) < EMOTE_COOLDOWN_MS) {
+      socket.emit("emoteError", { message: "이모티콘은 2초에 한 번 사용할 수 있습니다." });
+      return;
+    }
+
+    player.lastEmoteAt = now;
+    const payload = {
       playerId: player.id,
-      label: EMOTES[key],
-      emote: key,
+      socketId: socket.id,
+      nickname: player.displayName || player.nickname,
+      emoteId: key,
+      label: EMOTES[key].label,
+      expiresAt: now + EMOTE_DISPLAY_MS,
+    };
+    io.to(room.id).emit("playerEmote", payload);
+    io.to(room.id).emit("emoteEvent", {
+      playerId: payload.playerId,
+      label: payload.label,
+      emote: payload.emoteId,
+      expiresAt: payload.expiresAt,
     });
   });
 

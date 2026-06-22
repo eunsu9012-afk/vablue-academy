@@ -98,6 +98,15 @@ const FLIP_NOT_STARTED_MESSAGE = "게임이 시작되면 카드를 오픈할 수
 const FLIP_NOT_OWN_CARD_MESSAGE = "내 카드만 오픈할 수 있습니다.";
 const WAITING_DELAY_MESSAGE = "다른 플레이어의 연결이 지연되고 있습니다.";
 const TOAST_DISPLAY_MS = 1000;
+const EMOTE_DISPLAY_MS = 2000;
+const EMOTE_COOLDOWN_MS = 2000;
+const EMOTE_COOLDOWN_MESSAGE = "이모티콘은 2초에 한 번 사용할 수 있습니다.";
+const EMOTE_DEFINITIONS = [
+  { id: "heung", label: "흥", image: "/assets/emotes/heung.png" },
+  { id: "ing", label: "잉", image: "/assets/emotes/ing.png" },
+  { id: "pup", label: "풉", image: "/assets/emotes/pup.png" },
+];
+const EMOTE_BY_ID = new Map(EMOTE_DEFINITIONS.map((emote) => [emote.id, emote]));
 const STATUS_ICONS = {
   lobby: "🔵",
   waiting: "🟢",
@@ -166,8 +175,12 @@ let pendingPreGameState = null;
 let startGameRequestPending = false;
 let latencyNonce = 0;
 let mobileTouchLastAt = 0;
+let emoteCooldownUntil = 0;
+let emoteCooldownTimer = null;
 const pendingLatencyPings = new Map();
 const missingFanAssetWarnings = new Set();
+const activePlayerEmotes = new Map();
+const emoteRemovalTimers = new Map();
 
 const TUTORIAL_STEPS = [
   {
@@ -342,6 +355,8 @@ function showScreen(name) {
   });
   state.activeScreen = name;
   document.body.classList.toggle("is-nickname-screen", name === "nickname");
+  document.body.classList.toggle("is-lobby-screen", name === "lobby");
+  document.body.classList.toggle("is-room-screen", name === "room");
   document.body.classList.toggle("is-tutorial-screen", name === "tutorial");
   document.body.classList.toggle("is-game-screen", name === "game");
   if (name !== "game") document.body.classList.remove("is-result-overlay-open");
@@ -358,6 +373,7 @@ function showScreen(name) {
     $("#turnTimer")?.classList.remove("urgent");
   }
   updateMobileMode();
+  updateEmoteToolbar();
 }
 
 function showToast(message, type = "info") {
@@ -368,6 +384,134 @@ function showToast(message, type = "info") {
   toast.classList.remove("hidden");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.add("hidden"), TOAST_DISPLAY_MS);
+}
+
+function selectorEscape(value) {
+  return window.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
+}
+
+function getSelfRoomPlayer() {
+  return state.room?.players?.find((player) => player.id === state.room.selfPlayerId) || null;
+}
+
+function getSelfEmotePlayer() {
+  if (state.activeScreen === "room" && state.room && !state.room.isTutorial) {
+    const player = getSelfRoomPlayer();
+    return player && !player.isAI ? player : null;
+  }
+  if (state.activeScreen === "game" && state.game && !state.game.isTutorial && !state.gameResult) {
+    const player = getSelfPlayer(state.game);
+    if (!player || player.isAI || player.spectator || player.eliminated) return null;
+    return state.game.status === "playing" ? player : null;
+  }
+  return null;
+}
+
+function updateEmoteToolbar() {
+  const toolbar = $("#emoteToolbar");
+  if (!toolbar) return;
+  const available = Boolean(getSelfEmotePlayer());
+  toolbar.classList.toggle("hidden", !available);
+  const isCooling = Date.now() < emoteCooldownUntil;
+  toolbar.querySelectorAll(".emote-button").forEach((button) => {
+    button.classList.toggle("is-cooling", isCooling);
+    button.setAttribute("aria-disabled", String(isCooling));
+    button.title = isCooling ? EMOTE_COOLDOWN_MESSAGE : (button.getAttribute("aria-label") || "이모티콘");
+  });
+}
+
+function startEmoteCooldown() {
+  emoteCooldownUntil = Date.now() + EMOTE_COOLDOWN_MS;
+  if (emoteCooldownTimer) clearTimeout(emoteCooldownTimer);
+  updateEmoteToolbar();
+  emoteCooldownTimer = setTimeout(() => {
+    emoteCooldownTimer = null;
+    updateEmoteToolbar();
+  }, EMOTE_COOLDOWN_MS + 30);
+}
+
+function requestEmote(emoteId) {
+  if (!EMOTE_BY_ID.has(emoteId) || !getSelfEmotePlayer()) return;
+  if (Date.now() < emoteCooldownUntil) {
+    showToast(EMOTE_COOLDOWN_MESSAGE, "warning");
+    return;
+  }
+  startEmoteCooldown();
+  socket.emit("sendEmote", { emoteId });
+}
+
+function removePlayerEmote(playerId) {
+  const escapedId = selectorEscape(playerId);
+  document.querySelectorAll(`[data-player-id="${escapedId}"] .player-emote-bubble`).forEach((bubble) => bubble.remove());
+}
+
+function getEmoteTarget(playerId) {
+  const escapedId = selectorEscape(playerId);
+  if (state.activeScreen === "room") {
+    const target = document.querySelector(`#roomPlayers .room-player-slot[data-player-id="${escapedId}"]`);
+    return target?.classList.contains("is-ai") || target?.classList.contains("empty-slot") ? null : target;
+  }
+  if (state.activeScreen === "game" && !state.game?.isTutorial) {
+    const target = document.querySelector(`#gamePlayers .player-zone[data-player-id="${escapedId}"]`);
+    return target?.classList.contains("ai-player") ? null : target;
+  }
+  return null;
+}
+
+function renderPlayerEmote(playerId) {
+  const active = activePlayerEmotes.get(playerId);
+  if (!active || active.expiresAt <= Date.now()) {
+    activePlayerEmotes.delete(playerId);
+    removePlayerEmote(playerId);
+    return;
+  }
+  const emote = EMOTE_BY_ID.get(active.emoteId);
+  const target = emote ? getEmoteTarget(playerId) : null;
+  if (!target) return;
+
+  target.querySelector(".player-emote-bubble")?.remove();
+  const bubble = document.createElement("div");
+  bubble.className = `player-emote-bubble ${state.activeScreen === "room" ? "room-emote-bubble" : "game-emote-bubble"}`;
+  bubble.setAttribute("aria-hidden", "true");
+  const image = document.createElement("img");
+  image.src = emote.image;
+  image.alt = "";
+  image.addEventListener("error", () => {
+    image.remove();
+    bubble.classList.add("image-missing");
+  }, { once: true });
+  bubble.appendChild(image);
+  target.appendChild(bubble);
+}
+
+function schedulePlayerEmoteRemoval(playerId, expiresAt) {
+  if (emoteRemovalTimers.has(playerId)) clearTimeout(emoteRemovalTimers.get(playerId));
+  const delay = Math.max(0, Number(expiresAt || 0) - Date.now());
+  const timer = setTimeout(() => {
+    emoteRemovalTimers.delete(playerId);
+    const active = activePlayerEmotes.get(playerId);
+    if (!active || active.expiresAt <= Date.now()) {
+      activePlayerEmotes.delete(playerId);
+      removePlayerEmote(playerId);
+    }
+  }, delay + 20);
+  emoteRemovalTimers.set(playerId, timer);
+}
+
+function showPlayerEmote(payload = {}) {
+  const playerId = String(payload.playerId || "");
+  const emoteId = String(payload.emoteId || payload.emote || "");
+  if (!playerId || !EMOTE_BY_ID.has(emoteId)) return;
+  const current = activePlayerEmotes.get(playerId);
+  if (current && current.expiresAt > Date.now()) return;
+  const expiresAt = Number(payload.expiresAt || 0) || Date.now() + EMOTE_DISPLAY_MS;
+  activePlayerEmotes.set(playerId, { emoteId, expiresAt });
+  renderPlayerEmote(playerId);
+  schedulePlayerEmoteRemoval(playerId, expiresAt);
+}
+
+function renderActivePlayerEmotes() {
+  for (const playerId of [...activePlayerEmotes.keys()]) renderPlayerEmote(playerId);
 }
 
 function hasFinalConsonant(text) {
@@ -2144,7 +2288,9 @@ function renderRoomFanAvatar(player) {
 }
 
 function renderRoomPlayerBadges(player, room) {
-  if (isAiPlayer(player)) return "";
+  if (isAiPlayer(player)) {
+    return `<span class="room-slot-badge room-slot-badge-ai">${escapeHtml(aiDifficultyLabel(room?.aiDifficulty))}</span>`;
+  }
   const badges = [];
   if (player?.isHost) badges.push(`<span class="room-slot-badge room-slot-badge-host">방장</span>`);
   if (player?.id === room?.selfPlayerId) badges.push(`<span class="room-slot-badge room-slot-badge-self">나</span>`);
@@ -2158,12 +2304,12 @@ function renderRoomPlayerSlot(player, index, room) {
   const isAI = isAiPlayer(player);
   const nameClass = player?.isVaNickname ? "va-name" : "";
   const badges = renderRoomPlayerBadges(player, room);
-  const subtitle = isAI ? aiDifficultyLabel(room?.aiDifficulty) : "플레이어";
+  const subtitle = isAI ? "AI" : "플레이어";
   const avatarMarkup = isAI
     ? `<span class="room-ai-mark" aria-hidden="true"></span>`
     : renderRoomFanAvatar(player);
   return `
-    <article class="room-player-slot waiting-player ${isAI ? "is-ai" : "is-human"} ${player?.isHost ? "is-host" : ""} ${player?.id === room?.selfPlayerId ? "is-self" : ""} ${player?.ready ? "is-ready" : ""}" data-slot-index="${index + 1}">
+    <article class="room-player-slot waiting-player ${isAI ? "is-ai" : "is-human"} ${player?.isHost ? "is-host" : ""} ${player?.id === room?.selfPlayerId ? "is-self" : ""} ${player?.ready ? "is-ready" : ""}" data-slot-index="${index + 1}" data-player-id="${escapeHtml(player.id)}">
       <div class="room-slot-corner">
         <span>${String(index + 1).padStart(2, "0")}</span>
       </div>
@@ -2285,6 +2431,8 @@ function renderRoom(room) {
     aiStatsNotice.textContent = AI_STATS_EXCLUDED_MESSAGE;
     aiStatsNotice.classList.toggle("hidden", !hasAI);
   }
+  updateEmoteToolbar();
+  renderActivePlayerEmotes();
 }
 
 function getSeatPosition(index, count) {
@@ -2564,6 +2712,8 @@ function renderGame(game) {
   scheduleFlipAvailabilityRefresh(game);
   updateGameOverlay(game);
   syncTutorialWithGame(game);
+  updateEmoteToolbar();
+  renderActivePlayerEmotes();
 }
 
 function renderGameInfoPanel(game) {
@@ -3377,6 +3527,10 @@ $("#startGameButton").addEventListener("click", async () => {
   socket.emit("startGame");
 });
 $("#roomLeaveButton").addEventListener("click", () => socket.emit("leaveRoom"));
+document.querySelectorAll(".emote-button").forEach((button) => {
+  button.addEventListener("click", () => requestEmote(button.dataset.emoteId || ""));
+  button.querySelector("img")?.addEventListener("error", () => button.classList.add("image-missing"), { once: true });
+});
 $("#bellButton").addEventListener("click", requestBell);
 $("#tutorialBackButton")?.addEventListener("click", goBackTutorialStep);
 $("#tutorialNextButton")?.addEventListener("click", advanceTutorialStep);
@@ -3457,8 +3611,9 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     requestBell();
   }
-  if (/^Numpad[1-5]$/.test(event.code)) {
-    socket.emit("sendEmote", { emote: event.code.replace("Numpad", "") });
+  if (/^Numpad[1-3]$/.test(event.code)) {
+    const emoteId = EMOTE_DEFINITIONS[Number(event.code.replace("Numpad", "")) - 1]?.id;
+    if (emoteId) requestEmote(emoteId);
   }
 });
 
@@ -3582,14 +3737,18 @@ socket.on("latencyPong", (payload) => {
   renderLatency();
 });
 
+socket.on("playerEmote", (payload) => showPlayerEmote(payload));
+
 socket.on("emoteEvent", (payload) => {
-  const zone = document.querySelector(`[data-player-id="${payload.playerId}"]`);
-  if (!zone) return;
-  const balloon = document.createElement("div");
-  balloon.className = "emote-balloon";
-  balloon.textContent = payload.label;
-  zone.appendChild(balloon);
-  setTimeout(() => balloon.remove(), 1000);
+  showPlayerEmote({
+    playerId: payload?.playerId,
+    emoteId: payload?.emote,
+    expiresAt: payload?.expiresAt,
+  });
+});
+
+socket.on("emoteError", (payload) => {
+  showToast(payload?.message || EMOTE_COOLDOWN_MESSAGE, "warning");
 });
 
 socket.on("gameResult", (payload) => {
