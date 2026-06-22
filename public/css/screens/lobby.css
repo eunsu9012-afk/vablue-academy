@@ -480,10 +480,14 @@
 }
 
 .room-status-pill.status-waiting,
-.user-status-pill.status-lobby,
 .user-status-pill.status-waiting {
   background: var(--bb-green-soft);
   color: var(--bb-green);
+}
+
+.user-status-pill.status-lobby {
+  background: var(--bb-blue-100);
+  color: var(--bb-blue-700);
 }
 
 .room-status-pill.status-playing,
@@ -685,10 +689,54 @@
   text-align: left;
 }
 
-.online-user:focus-visible,
 .online-user:hover {
   border-color: rgba(30, 107, 255, 0.46);
   box-shadow: var(--bb-focus-ring);
+}
+
+.online-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 6px;
+}
+
+.online-user-join-button {
+  display: inline-grid;
+  min-width: 58px;
+  min-height: 26px;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(30, 107, 255, 0.35);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--bb-blue-700);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  padding: 0 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.online-user-join-button:hover:not(:disabled),
+.online-user-join-button:focus-visible {
+  border-color: rgba(30, 107, 255, 0.68);
+  background: var(--bb-blue-100);
+  box-shadow: var(--bb-focus-ring);
+  outline: 0;
+}
+
+.online-user-join-button:disabled {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: var(--bb-gray-soft);
+  color: var(--bb-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .status-dot {
@@ -696,6 +744,10 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--bb-blue-600);
+}
+
+.online-user.status-waiting .status-dot {
   background: var(--bb-green);
 }
 
@@ -710,9 +762,11 @@
 
 .user-status-pill {
   min-height: 24px;
-  max-width: 66px;
+  min-width: 50px;
+  max-width: 58px;
   padding-inline: 8px;
   font-size: 11px;
+  line-height: 1;
 }
 
 .online-users-panel.collapsed .online-users-list {
@@ -751,7 +805,21 @@
   text-overflow: ellipsis;
 }
 
+.tutorial-panel-body {
+  gap: 10px;
+}
+
+.tutorial-panel-copy {
+  min-width: 0;
+  margin: 0;
+  color: var(--bb-text-sub);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .tutorial-button {
+  width: 100%;
   min-height: 42px;
   border-radius: 14px;
   font-weight: 950;
@@ -956,6 +1024,32 @@
     grid-template-columns: 1fr;
   }
 
+  .online-user {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: 6px;
+    min-height: 36px;
+    padding: 6px;
+  }
+
+  .online-user-actions {
+    gap: 4px;
+  }
+
+  .online-user-join-button {
+    min-width: 52px;
+    min-height: 24px;
+    padding-inline: 7px;
+    font-size: 10px;
+  }
+
+  .user-status-pill {
+    min-width: 44px;
+    max-width: 50px;
+    min-height: 24px;
+    padding-inline: 6px;
+    font-size: 10px;
+  }
+
   .online-users-panel.collapsed,
   .guide-panel {
     gap: 0;
@@ -983,6 +1077,16 @@
 
   .room-badge-group .badge {
     max-width: 64px;
+  }
+
+  .online-user-join-button {
+    min-width: 48px;
+    padding-inline: 6px;
+  }
+
+  .user-status-pill {
+    min-width: 42px;
+    max-width: 48px;
   }
 }
 

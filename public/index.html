@@ -219,16 +219,11 @@
 
                 <section class="panel bb-panel guide-panel lobby-info-card">
                   <div class="lobby-card-heading">
-                    <h2>공지사항</h2>
-                    <button id="guideToggleButton" class="mini-button guide-title-toggle" type="button" aria-expanded="true">접기</button>
+                    <h2>튜토리얼</h2>
                   </div>
-                  <div id="guideBody" class="guide-body">
-                    <ul class="lobby-notice-list">
-                      <li>같은 캐릭터가 전체 공개 카드에서 5개가 되면 종을 치세요.</li>
-                      <li>하드 모드는 한 카드에 여러 캐릭터가 함께 등장합니다.</li>
-                      <li>점수제로 진행되며, 마지막까지 살아남은 플레이어가 승리합니다.</li>
-                    </ul>
-                    <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼</button>
+                  <div id="guideBody" class="guide-body tutorial-panel-body">
+                    <p class="tutorial-panel-copy">게임 규칙을 확인해 보세요.</p>
+                    <button id="tutorialButton" class="secondary-button tutorial-button" type="button">튜토리얼 보기</button>
                   </div>
                 </section>
               </aside>
@@ -585,7 +580,6 @@
       </form>
     </div>
 
-    <div id="userContextMenu" class="context-menu hidden"></div>
     <div id="toast" class="toast hidden"></div>
 
     <script src="/socket.io/socket.io.js"></script>

@@ -1203,69 +1203,78 @@ function restoreUser(nickname) {
   renderOnlineUsers();
 }
 
+function getOnlineUserRoom(user) {
+  const roomId = user?.roomId;
+  if (!roomId) return null;
+  const rooms = Array.isArray(state.lobby?.rooms) ? state.lobby.rooms : [];
+  return rooms.find((room) => String(room.id) === String(roomId)) || null;
+}
+
+function getOnlineUserStatusType(user) {
+  const rawStatus = String(user?.status || "");
+  if (rawStatus === "playing" || rawStatus === "countdown") return "playing";
+
+  const room = getOnlineUserRoom(user);
+  if (room) {
+    const roomStatus = getLobbyRoomStatus(room);
+    return roomStatus === "waiting" || roomStatus === "full" ? "waiting" : "playing";
+  }
+
+  if (user?.roomId && (rawStatus === "waiting" || rawStatus === "full")) return "waiting";
+  return "lobby";
+}
+
+function getOnlineUserStatusLabel(user) {
+  const status = getOnlineUserStatusType(user);
+  if (status === "waiting") return "게임방";
+  if (status === "playing") return "게임중";
+  return "로비";
+}
+
+function isSelfOnlineUser(user) {
+  const selfNickname = state.lobby?.currentUser?.nickname || state.nickname;
+  return Boolean(selfNickname && user?.nickname === selfNickname);
+}
+
+function isOnlineUserJoinableRoom(user) {
+  const room = getOnlineUserRoom(user);
+  if (room) return getLobbyRoomStatus(room) === "waiting";
+  return String(user?.status || "") === "waiting";
+}
+
+function canJoinOnlineUser(user) {
+  return !isSelfOnlineUser(user) && getOnlineUserStatusType(user) === "waiting" && isOnlineUserJoinableRoom(user) && Boolean(user?.roomId);
+}
+
 function statusMessage(user) {
-  if (user.status === "lobby") return "해당 유저는 아직 방에 없습니다";
-  if (user.status === "full") return "해당 방은 가득 찼습니다";
-  if (user.status === "playing") return "진행 중인 방에는 입장할 수 없습니다";
+  if (isSelfOnlineUser(user)) return "자기 자신에게는 같이하기를 사용할 수 없습니다";
+  const status = getOnlineUserStatusType(user);
+  if (status === "lobby") return "로비에 있는 유저는 같이하기 할 수 없습니다";
+  if (status === "playing") return "게임중인 유저는 같이하기 할 수 없습니다";
+  if (!isOnlineUserJoinableRoom(user)) return "입장 가능한 게임방이 아닙니다";
   return "";
 }
 
-function positionContextMenu(x, y) {
-  const menu = $("#userContextMenu");
-  menu.classList.remove("hidden");
-  const rect = menu.getBoundingClientRect();
-  const left = Math.min(window.innerWidth - rect.width - 12, Math.max(12, x));
-  const top = Math.min(window.innerHeight - rect.height - 12, Math.max(12, y));
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
+function joinOnlineUser(user) {
+  if (!canJoinOnlineUser(user)) {
+    const message = statusMessage(user);
+    if (message) showToast(message);
+    return;
+  }
+  if (user.roomHasPassword) openPasswordModal(user.roomId, "비밀번호방입니다.\n비밀번호를 입력해 주세요.");
+  else socket.emit("joinRoom", { roomId: user.roomId });
 }
 
 function hideContextMenu() {
-  $("#userContextMenu").classList.add("hidden");
+  $("#userContextMenu")?.classList.add("hidden");
 }
 
-function showUserContextMenu(user, x, y) {
-  const menu = $("#userContextMenu");
-  const joinDisabled = user.status !== "waiting";
-  menu.innerHTML = `
-    <div class="context-title">${renderName(user, { hideAiBadge: true })}</div>
-    <div class="context-status status-${escapeHtml(user.status)}">${STATUS_ICONS[user.status] || "•"} [${escapeHtml(user.statusLabel)}]</div>
-    <button class="context-item join-user ${joinDisabled ? "is-disabled" : ""}" type="button" data-disabled="${joinDisabled}">같이하기</button>
-    <button class="context-item hide-user" type="button">숨기기</button>
-  `;
-
-  menu.querySelector(".join-user").addEventListener("click", () => {
-    if (joinDisabled) {
-      showToast(statusMessage(user));
-      hideContextMenu();
-      return;
-    }
-    hideContextMenu();
-    if (user.roomHasPassword) openPasswordModal(user.roomId, "비밀번호방입니다.\n비밀번호를 입력해 주세요.");
-    else socket.emit("joinRoom", { roomId: user.roomId });
-  });
-  menu.querySelector(".hide-user").addEventListener("click", () => {
-    hideUser(user.nickname);
-    hideContextMenu();
-  });
-  positionContextMenu(x, y);
+function showUserContextMenu() {
+  hideContextMenu();
 }
 
-function showHiddenUsersMenu(x, y) {
-  const hiddenUsers = [...getHiddenUsers()];
-  if (!hiddenUsers.length) return;
-  const menu = $("#userContextMenu");
-  menu.innerHTML = `
-    <div class="context-title">숨기기 취소</div>
-    ${hiddenUsers.map((nickname) => `<button class="context-item restore-user" data-nickname="${escapeHtml(nickname)}" type="button">${escapeHtml(nickname)}</button>`).join("")}
-  `;
-  menu.querySelectorAll(".restore-user").forEach((button) => {
-    button.addEventListener("click", () => {
-      restoreUser(button.dataset.nickname);
-      hideContextMenu();
-    });
-  });
-  positionContextMenu(x, y);
+function showHiddenUsersMenu() {
+  hideContextMenu();
 }
 
 function renderRankList(selector, rows, mode) {
@@ -1403,18 +1412,22 @@ function renderLobby() {
 }
 
 function renderOnlineUserRow(user) {
-  const item = document.createElement("button");
-  item.type = "button";
-  item.className = `online-user status-${escapeHtml(user.status)}`;
+  const status = getOnlineUserStatusType(user);
+  const statusLabel = getOnlineUserStatusLabel(user);
+  const canJoin = canJoinOnlineUser(user);
+  const isSelf = isSelfOnlineUser(user);
+  const joinTitle = canJoin ? `${displayName(user)}님 방으로 같이하기` : statusMessage(user);
+  const item = document.createElement("div");
+  item.className = `online-user status-${status}`;
   item.innerHTML = `
     <span class="status-dot" aria-hidden="true"></span>
     <span class="online-user-name">${renderName(user, { hideAiBadge: true })}</span>
-    <span class="user-status-pill status-${escapeHtml(user.status)}">${escapeHtml(user.statusLabel)}</span>
+    <span class="online-user-actions">
+      ${isSelf ? "" : `<button class="online-user-join-button" type="button" ${canJoin ? "" : "disabled"} aria-disabled="${String(!canJoin)}" title="${escapeHtml(joinTitle)}">같이하기</button>`}
+      <span class="user-status-pill status-${status}">${escapeHtml(statusLabel)}</span>
+    </span>
   `;
-  item.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-    showUserContextMenu(user, event.clientX, event.clientY);
-  });
+  item.querySelector(".online-user-join-button")?.addEventListener("click", () => joinOnlineUser(user));
   return item;
 }
 
@@ -1422,8 +1435,7 @@ function renderOnlineUsers() {
   const list = $("#onlineUsersList");
   if (!state.lobby || !list) return;
   updateOnlineUsersPanelState();
-  const hiddenUsers = getHiddenUsers();
-  const users = (state.lobby.onlineUsers || []).filter((user) => !hiddenUsers.has(user.nickname));
+  const users = Array.isArray(state.lobby.onlineUsers) ? state.lobby.onlineUsers : [];
   if (!users.length) {
     list.innerHTML = `<p class="hint-text lobby-empty-inline">표시할 유저가 없습니다.</p>`;
     return;
@@ -3188,11 +3200,6 @@ $("#leaveButton").addEventListener("click", () => {
     showScreen("nickname");
     socket.connect();
   }
-});
-
-$("#onlineUsersPanel").addEventListener("click", (event) => {
-  if (event.target.closest(".online-user") || event.target.closest(".mini-button")) return;
-  showHiddenUsersMenu(event.clientX, event.clientY);
 });
 
 document.addEventListener("click", (event) => {
