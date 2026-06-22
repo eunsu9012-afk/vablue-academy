@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const express = require("express");
+const compression = require("compression");
 const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 3000;
@@ -10,6 +11,15 @@ const USERDATA_PATH = path.join(__dirname, "userdata.json");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+app.use(compression({
+  threshold: 512,
+  filter: (req, res) => {
+    const type = String(res.getHeader("Content-Type") || "");
+    if (/image|audio|video|font/i.test(type)) return false;
+    return compression.filter(req, res);
+  },
+}));
 
 app.use(express.static(path.join(__dirname, "public"), {
   etag: true,
