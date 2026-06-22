@@ -1,3 +1,8 @@
+const APP_VERSION = "turn-sync-fix-20260623-1";
+const DEBUG_TIMING = new URLSearchParams(window.location.search).has("debugTiming");
+
+console.info("[Babyblue Halligalli] client version:", APP_VERSION);
+
 const socket = io();
 
 const CHARACTER_ASSETS = {
@@ -376,7 +381,7 @@ function showScreen(name) {
   document.body.classList.toggle("is-game-screen", name === "game");
   if (name !== "game") document.body.classList.remove("is-result-overlay-open");
   if (previousScreen !== name) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  if (name !== "room") updateStartCountdownOverlay(null);
+  if (name !== "room" && !state.gameStartSync) updateStartCountdownOverlay(null);
   if (name !== "room" && name !== "game") cancelPreGameCountdown();
   const gameHud = $("#gameHud");
   if (gameHud) gameHud.classList.toggle("hidden", name !== "game");
@@ -666,7 +671,18 @@ function isFlipAvailable(game = state.game) {
   if (isFlipRequestPendingForTurn(game)) return false;
   const self = getSelfPlayer(game);
   if (self?.id !== game.currentTurnPlayerId) return false;
-  return Date.now() >= getFlipAllowedAt(game);
+  const turnCanOpenAt = getFlipAllowedAt(game);
+  const now = Date.now();
+  const available = now >= turnCanOpenAt;
+  debugTiming("flip-availability", {
+    currentTurnPlayerId: game.currentTurnPlayerId,
+    selfPlayerId: game.selfPlayerId,
+    turnCanOpenAt,
+    now,
+    remainingFlipWaitMs: turnCanOpenAt - now,
+    isFlipAvailable: available,
+  });
+  return available;
 }
 
 function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
@@ -1569,6 +1585,7 @@ function normalizeStartCountdownTiming(countdown) {
     startedAt: Number.isFinite(startedAt) && startedAt > 0 ? startedAt : now,
     endsAt: Number.isFinite(endsAt) && endsAt > 0 ? endsAt : now,
     totalMs: Number.isFinite(totalMs) && totalMs > 0 ? totalMs : 3000,
+    rawEndsAt,
   };
 }
 
@@ -1589,6 +1606,14 @@ function normalizeGameTiming(game) {
   if (!game) return game;
   const serverNow = Number(game.serverNow || 0);
   const turnCanOpenAt = normalizeServerTimestamp(game.turnCanOpenAt || game.nextFlipAllowedAt, serverNow);
+  debugTiming("game-state", {
+    currentTurnPlayerId: game.currentTurnPlayerId,
+    selfPlayerId: game.selfPlayerId,
+    rawTurnCanOpenAt: game.turnCanOpenAt || game.nextFlipAllowedAt,
+    turnCanOpenAt,
+    now: Date.now(),
+    remainingFlipWaitMs: turnCanOpenAt - Date.now(),
+  });
   return {
     ...game,
     nextFlipAllowedAt: turnCanOpenAt,
@@ -2392,12 +2417,31 @@ function clearStartCountdownTimer() {
   startCountdownTimer = null;
 }
 
+function shouldShowStartCountdownOverlay(countdown) {
+  return Boolean(
+    countdown
+    && (
+      state.activeScreen === "room"
+      || state.gameStartSync
+      || state.room?.status === "countdown"
+    ),
+  );
+}
+
+function debugTiming(label, details = {}) {
+  if (!DEBUG_TIMING) return;
+  console.debug(`[Babyblue Halligalli][timing] ${label}`, {
+    appVersion: APP_VERSION,
+    ...details,
+  });
+}
+
 function updateStartCountdownOverlay(countdown) {
   const overlay = ensureStartCountdownOverlay();
   const numberElement = $("#preGameCountdownNumber");
   clearStartCountdownTimer();
 
-  if (!countdown || state.activeScreen !== "room") {
+  if (!shouldShowStartCountdownOverlay(countdown)) {
     if (!preGameCountdownPromise) hidePreGameCountdownOverlay();
     lastStartCountdownNumber = null;
     return;
@@ -2405,6 +2449,13 @@ function updateStartCountdownOverlay(countdown) {
 
   const remainingMs = Math.max(0, Number(countdown.endsAt || 0) - Date.now());
   const number = Math.max(1, Math.min(3, Math.ceil(remainingMs / 1000)));
+  debugTiming("countdown", {
+    activeScreen: state.activeScreen,
+    countdownEndsAt: countdown.rawEndsAt || countdown.endsAt,
+    localCountdownEndsAt: countdown.endsAt,
+    remainingMs,
+    number,
+  });
 
   if (lastStartCountdownNumber !== number) {
     lastStartCountdownNumber = number;
