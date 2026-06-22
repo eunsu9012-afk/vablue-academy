@@ -11,7 +11,25 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (/\.(webp|png|jpg|jpeg|gif|svg|ico|mp3|wav|ogg)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=2592000");
+      return;
+    }
+
+    if (/\.(css|js)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return;
+    }
+
+    if (/\.html$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  },
+}));
 
 const CHARACTER_IDS = ["seolhong", "yeowooyeon", "choiaeri", "nunyo", "nano", "ruchel"];
 const FAN_CHARACTER_IDS = new Set(["jjangdori", "arangi", "golgoli", "maesili", "woori", "pico"]);

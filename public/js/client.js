@@ -1,21 +1,21 @@
 const socket = io();
 
 const CHARACTER_ASSETS = {
-  seolhong: "/assets/characters/seolhong.png",
-  yeowooyeon: "/assets/characters/yeowooyeon.png",
-  choiaeri: "/assets/characters/choiaeri.png",
-  nunyo: "/assets/characters/nunyo.png",
-  nano: "/assets/characters/nano.png",
-  ruchel: "/assets/characters/ruchel.png",
+  seolhong: "/assets/characters/seolhong.webp",
+  yeowooyeon: "/assets/characters/yeowooyeon.webp",
+  choiaeri: "/assets/characters/choiaeri.webp",
+  nunyo: "/assets/characters/nunyo.webp",
+  nano: "/assets/characters/nano.webp",
+  ruchel: "/assets/characters/ruchel.webp",
 };
 
 const FAN_CHARACTERS = [
-  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.png" },
-  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.png" },
-  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.png" },
-  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.png" },
-  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.png" },
-  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.png" },
+  { id: "jjangdori", name: "짱돌이", image: "/assets/fan-characters/jjangdori.webp" },
+  { id: "arangi", name: "아랑이", image: "/assets/fan-characters/arangi.webp" },
+  { id: "golgoli", name: "골골이", image: "/assets/fan-characters/golgoli.webp" },
+  { id: "maesili", name: "매실이", image: "/assets/fan-characters/maesili.webp" },
+  { id: "woori", name: "우리", image: "/assets/fan-characters/woori.webp" },
+  { id: "pico", name: "피코", image: "/assets/fan-characters/pico.webp" },
 ];
 const FAN_CHARACTER_IDS = new Set(FAN_CHARACTERS.map((character) => character.id));
 const FAN_CHARACTER_ALIASES = new Map([
@@ -29,13 +29,12 @@ const FAN_CHARACTER_ALIASES = new Map([
 const DEFAULT_FAN_CHARACTER_ID = "jjangdori";
 const FAN_CHARACTER_STORAGE_KEY = "babyblue-fan-character-id";
 
-const CARD_BACK_ASSET = "/assets/cards/back.png";
+const CARD_BACK_ASSET = "/assets/cards/back.webp";
 const VICTORY_SOUND_ASSET = "/assets/sounds/victory.mp3";
 const BELL_SOUND_ASSET = "/assets/sounds/bell.mp3";
-const BELL_IMAGE_ASSET = "/assets/bell/bell.png";
+const BELL_IMAGE_ASSET = "/assets/bell/bell.webp";
 const BELL_IMAGE_URL = BELL_IMAGE_ASSET;
 const HIDDEN_USERS_KEY = "babyblue-hidden-users";
-const BGM_MODE_KEY = "bgmMode";
 const LOBBY_GUIDE_COLLAPSED_KEY = "lobbyGuideCollapsed";
 const CONTROL_HAND_STORAGE_KEY = "babyblue-control-hand";
 
@@ -103,9 +102,9 @@ const EMOTE_DISPLAY_MS = 1000;
 const EMOTE_COOLDOWN_MS = 1000;
 const EMOTE_COOLDOWN_MESSAGE = "이모티콘은 1초에 한 번 사용할 수 있습니다.";
 const EMOTE_DEFINITIONS = [
-  { id: "heung", label: "흥", image: "/assets/emotes/heung.png" },
-  { id: "ing", label: "잉", image: "/assets/emotes/ing.png" },
-  { id: "pup", label: "풉", image: "/assets/emotes/pup.png" },
+  { id: "heung", label: "흥", image: "/assets/emotes/heung.webp" },
+  { id: "ing", label: "잉", image: "/assets/emotes/ing.webp" },
+  { id: "pup", label: "풉", image: "/assets/emotes/pup.webp" },
 ];
 const EMOTE_BY_ID = new Map(EMOTE_DEFINITIONS.map((emote) => [emote.id, emote]));
 const STATUS_ICONS = {
@@ -1124,45 +1123,36 @@ function roomStatusLabel(status) {
 }
 
 // BGM is intentionally resilient: missing files are skipped and the app stays silent.
-const BGM_PLAYLISTS = {
-  energetic: [
-    "/assets/sounds/bgm1.mp3",
-    "/assets/sounds/bgm2.mp3",
-    "/assets/sounds/bgm3.mp3",
-    "/assets/sounds/bgm4.mp3",
-  ],
-  calm: [
-    "/assets/sounds/track1.mp3",
-    "/assets/sounds/track2.mp3",
-    "/assets/sounds/track3.mp3",
-  ],
-};
-BGM_PLAYLISTS.all = [...BGM_PLAYLISTS.energetic, ...BGM_PLAYLISTS.calm];
-const BGM_MODES = new Set(["all", "energetic", "calm"]);
+const BGM_TRACKS = [
+  "/assets/sounds/track1.mp3",
+  "/assets/sounds/track2.mp3",
+  "/assets/sounds/track3.mp3",
+];
 const IMAGE_PRELOAD_URLS = [
   ...Object.values(CHARACTER_ASSETS),
   ...FAN_CHARACTERS.map((character) => character.image),
   CARD_BACK_ASSET,
   BELL_IMAGE_URL,
 ];
-const AUDIO_PRELOAD_URLS = [
-  ...BGM_PLAYLISTS.all,
+const SFX_PRELOAD_URLS = [
   BELL_SOUND_ASSET,
   VICTORY_SOUND_ASSET,
 ];
 const bgm = new Audio();
-bgm.preload = "auto";
+bgm.preload = "none";
+const nextBgm = new Audio();
+nextBgm.preload = "none";
 const preloadedAudio = new Map();
 const imageCache = new Map();
 const failedImageUrls = new Set();
 const imagePreloadPromises = new Map();
 let requiredAssetsPromise = null;
 let bgmIndex = 0;
-let currentBgmMode = "all";
 let userGestureSeen = false;
 let bgmStarted = false;
 let skippedTracks = 0;
 let bgmSilent = false;
+let preloadedNextBgmIndex = null;
 
 function clampVolumeStep(value, fallback = 3) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -1177,40 +1167,35 @@ function getStoredBgmVolume() {
   return clampVolumeStep(localStorage.getItem("bgmVolume"), 3);
 }
 
-function getStoredBgmMode() {
-  const mode = localStorage.getItem(BGM_MODE_KEY);
-  return BGM_MODES.has(mode) ? mode : "all";
-}
-
 function getStoredSfxVolume() {
   return clampVolumeStep(localStorage.getItem("sfxVolume"), 3);
 }
 
-function getCurrentBgmTracks() {
-  return BGM_PLAYLISTS[currentBgmMode] || BGM_PLAYLISTS.all;
-}
-
-function applyBgmMode(value, restart = true) {
-  currentBgmMode = BGM_MODES.has(value) ? value : "all";
-  localStorage.setItem(BGM_MODE_KEY, currentBgmMode);
-  const select = $("#bgmModeSelect");
-  if (select) select.value = currentBgmMode;
-
+function resetBgmPlaybackState() {
   bgm.pause();
-  bgmIndex = 0;
+  bgm.removeAttribute("src");
+  bgm.load();
+  nextBgm.removeAttribute("src");
+  nextBgm.load();
   skippedTracks = 0;
   bgmSilent = false;
   bgmStarted = false;
-
-  if (restart) startBgmWhenAllowed();
+  preloadedNextBgmIndex = null;
 }
 
 function applyBgmVolume(value) {
   const volume = clampVolumeStep(value, 3);
   bgm.volume = volume / 5;
+  nextBgm.volume = volume / 5;
   localStorage.setItem("bgmVolume", String(volume));
   $("#bgmVolumeSlider").value = String(volume);
   $("#bgmVolumeValue").textContent = String(volume);
+  if (volume <= 0) {
+    resetBgmPlaybackState();
+    return;
+  }
+  startBgmWhenAllowed();
+  preloadNextBgmTrack();
 }
 
 function applySfxVolume(value) {
@@ -1323,7 +1308,7 @@ async function ensureAssetsReady() {
 function preloadAssets() {
   preloadRequiredAssets();
 
-  for (const url of AUDIO_PRELOAD_URLS) {
+  for (const url of SFX_PRELOAD_URLS) {
     const audio = new Audio();
     audio.preload = "auto";
     audio.src = url;
@@ -1332,28 +1317,47 @@ function preloadAssets() {
   }
 }
 
+function getCurrentBgmTrack() {
+  if (!BGM_TRACKS.length) return "";
+  return BGM_TRACKS[bgmIndex % BGM_TRACKS.length];
+}
+
+function preloadNextBgmTrack() {
+  if (!userGestureSeen || bgmSilent || bgm.volume <= 0 || BGM_TRACKS.length <= 1) return;
+  const nextIndex = (bgmIndex + 1) % BGM_TRACKS.length;
+  if (preloadedNextBgmIndex === nextIndex && nextBgm.src) return;
+  nextBgm.preload = "auto";
+  nextBgm.src = BGM_TRACKS[nextIndex];
+  nextBgm.load();
+  preloadedNextBgmIndex = nextIndex;
+}
+
 function playBgmTrack() {
   if (!userGestureSeen || bgmSilent) return;
-  const tracks = getCurrentBgmTracks();
-  if (!tracks.length) return;
-  bgm.src = tracks[bgmIndex % tracks.length];
+  if (bgm.volume <= 0) return;
+  const track = getCurrentBgmTrack();
+  if (!track) return;
+  bgm.preload = "auto";
+  bgm.src = track;
+  bgm.load();
   bgm.play().then(() => {
     bgmStarted = true;
     skippedTracks = 0;
+    preloadNextBgmTrack();
   }).catch(() => {
     // Autoplay policy or a missing file can reject here; the error event handles missing files.
   });
 }
 
 function startBgmWhenAllowed() {
-  if (state.activeScreen === "nickname" || bgmStarted) return;
+  if (state.activeScreen === "nickname" || bgmStarted || bgm.volume <= 0) return;
   playBgmTrack();
 }
 
 function playNextBgmTrack() {
-  const tracks = getCurrentBgmTracks();
-  if (!tracks.length) return;
-  bgmIndex = (bgmIndex + 1) % tracks.length;
+  if (!BGM_TRACKS.length) return;
+  bgmIndex = (bgmIndex + 1) % BGM_TRACKS.length;
+  bgmStarted = false;
   playBgmTrack();
 }
 
@@ -1581,14 +1585,14 @@ function handleGameDisplayNow(payload) {
 
 bgm.addEventListener("ended", playNextBgmTrack);
 bgm.addEventListener("error", () => {
-  const tracks = getCurrentBgmTracks();
-  if (!tracks.length) return;
+  if (!BGM_TRACKS.length) return;
   skippedTracks += 1;
-  if (skippedTracks >= tracks.length) {
+  if (skippedTracks >= BGM_TRACKS.length) {
     bgmSilent = true;
     return;
   }
-  bgmIndex = (bgmIndex + 1) % tracks.length;
+  bgmIndex = (bgmIndex + 1) % BGM_TRACKS.length;
+  bgmStarted = false;
   playBgmTrack();
 });
 
@@ -3447,18 +3451,6 @@ function closePasswordModal() {
   $("#passwordModal").classList.add("hidden");
 }
 
-function openNicknameChangeModal() {
-  $("#settingsPanel").classList.add("hidden");
-  $("#nicknameChangeError").textContent = "";
-  $("#nicknameChangeInput").value = state.nickname || "";
-  $("#nicknameChangeModal").classList.remove("hidden");
-  $("#nicknameChangeInput").focus();
-}
-
-function closeNicknameChangeModal() {
-  $("#nicknameChangeModal").classList.add("hidden");
-}
-
 function closeSettingsPanel() {
   $("#settingsPanel").classList.add("hidden");
 }
@@ -3559,18 +3551,6 @@ $("#passwordForm").addEventListener("submit", (event) => {
 });
 
 $("#cancelPasswordButton").addEventListener("click", closePasswordModal);
-$("#nicknameChangeButton").addEventListener("click", openNicknameChangeModal);
-$("#cancelNicknameChangeButton").addEventListener("click", closeNicknameChangeModal);
-$("#nicknameChangeForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const nickname = $("#nicknameChangeInput").value.trim();
-  $("#nicknameChangeError").textContent = "";
-  if (!nickname || nickname.length > 6) {
-    $("#nicknameChangeError").textContent = "닉네임은 1~6자로 입력해 주세요.";
-    return;
-  }
-  socket.emit("changeNickname", { nickname });
-});
 
 $("#readyButton").addEventListener("click", () => socket.emit("toggleReady"));
 $("#addAIButton").addEventListener("click", () => {
@@ -3630,10 +3610,6 @@ $("#settingsButton").addEventListener("click", (event) => {
 
 $("#bgmVolumeSlider").addEventListener("input", (event) => {
   applyBgmVolume(event.target.value);
-});
-
-$("#bgmModeSelect").addEventListener("change", (event) => {
-  applyBgmMode(event.target.value, true);
 });
 
 $("#sfxVolumeSlider").addEventListener("input", (event) => {
@@ -3723,16 +3699,6 @@ updateMobileMode();
 socket.on("nicknameError", (message) => {
   $("#nicknameError").textContent = message;
   showScreen("nickname");
-});
-
-socket.on("nicknameChangeResult", (payload) => {
-  if (!payload.success) {
-    $("#nicknameChangeError").textContent = payload.message || "닉네임 변경에 실패했습니다.";
-    return;
-  }
-  state.nickname = payload.nickname;
-  closeNicknameChangeModal();
-  showToast(payload.message || "닉네임이 변경되었습니다.");
 });
 
 socket.on("lobbyState", (payload) => {
@@ -3890,7 +3856,6 @@ preloadAssets();
 saveFanCharacterId(getStoredFanCharacterId());
 renderFanCharacterPicker();
 syncNicknameSubmitState();
-applyBgmMode(getStoredBgmMode(), false);
 applyBgmVolume(getStoredBgmVolume());
 applySfxVolume(getStoredSfxVolume());
 applyLobbyGuideCollapsed(isLobbyGuideCollapsed());

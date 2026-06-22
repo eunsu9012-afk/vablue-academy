@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>베이블루 할리갈리 온라인</title>
-    <link rel="icon" type="image/png" href="/assets/bell/bell.png" />
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" type="image/webp" href="/assets/bell/bell.webp" />
+    <link rel="stylesheet" href="/css/style.css?v=asset-opt-20260622" />
   </head>
   <body>
     <div class="app-shell bb-page">
       <header class="topbar bb-header">
         <div class="brand bb-brand">
-          <span class="brand-mark"><img src="/assets/bell/bell.png" alt="" aria-hidden="true" /></span>
+          <span class="brand-mark"><img src="/assets/bell/bell.webp" alt="" aria-hidden="true" /></span>
           <span>베이블루 할리갈리</span>
         </div>
         <div id="gameHud" class="game-hud hidden">
@@ -23,15 +23,15 @@
         <div id="emoteToolbar" class="emote-toolbar hidden" aria-label="이모티콘">
           <span class="emote-toolbar-label">이모티콘</span>
           <button class="emote-button" type="button" data-emote-id="heung" title="흥" aria-label="흥 이모티콘">
-            <img src="/assets/emotes/heung.png" alt="" />
+            <img src="/assets/emotes/heung.webp" alt="" />
             <span class="emote-hotkey-label" aria-hidden="true">a</span>
           </button>
           <button class="emote-button" type="button" data-emote-id="ing" title="잉" aria-label="잉 이모티콘">
-            <img src="/assets/emotes/ing.png" alt="" />
+            <img src="/assets/emotes/ing.webp" alt="" />
             <span class="emote-hotkey-label" aria-hidden="true">s</span>
           </button>
           <button class="emote-button" type="button" data-emote-id="pup" title="풉" aria-label="풉 이모티콘">
-            <img src="/assets/emotes/pup.png" alt="" />
+            <img src="/assets/emotes/pup.webp" alt="" />
             <span class="emote-hotkey-label" aria-hidden="true">d</span>
           </button>
         </div>
@@ -41,14 +41,6 @@
         </div>
         <button id="settingsButton" class="icon-button bb-button" type="button" title="메뉴" aria-label="설정 메뉴 열기">메뉴</button>
         <section id="settingsPanel" class="settings-panel hidden" aria-label="설정 패널">
-          <label class="settings-row">
-            <span>BGM 모드</span>
-            <select id="bgmModeSelect">
-              <option value="all">전부</option>
-              <option value="energetic">경쾌</option>
-              <option value="calm">잔잔</option>
-            </select>
-          </label>
           <label class="volume-row">
             <span>BGM 볼륨</span>
             <input id="bgmVolumeSlider" type="range" min="0" max="5" step="1" />
@@ -59,7 +51,6 @@
             <input id="sfxVolumeSlider" type="range" min="0" max="5" step="1" />
             <strong id="sfxVolumeValue">3</strong>
           </label>
-          <button id="nicknameChangeButton" class="secondary-button" type="button">닉네임 변경</button>
           <button id="leaveButton" class="secondary-button" type="button">나가기</button>
         </section>
       </header>
@@ -70,7 +61,7 @@
             <form id="nicknameForm" class="entry-panel nickname-shell" autocomplete="off">
               <header class="nickname-brand-area">
                 <span class="nickname-logo" aria-hidden="true">
-                  <img src="/assets/bell/bell.png" alt="" />
+                  <img src="/assets/bell/bell.webp" alt="" />
                 </span>
                 <div class="nickname-brand-copy">
                   <h1>베이블루 할리갈리 온라인</h1>
@@ -125,7 +116,7 @@
             <header class="lobby-header-panel">
               <div class="lobby-brand-block">
                 <span class="lobby-logo" aria-hidden="true">
-                  <img src="/assets/bell/bell.png" alt="" />
+                  <img src="/assets/bell/bell.webp" alt="" />
                 </span>
                 <div class="lobby-title-copy">
                   <h1>베이블루 할리갈리</h1>
@@ -253,7 +244,7 @@
             <header class="tutorial-header">
               <div class="tutorial-brand">
                 <span class="tutorial-logo" aria-hidden="true">
-                  <img src="/assets/bell/bell.png" alt="" />
+                  <img src="/assets/bell/bell.webp" alt="" />
                 </span>
                 <div class="tutorial-title-copy">
                   <h1>베이블루 할리갈리 온라인 튜토리얼</h1>
@@ -389,7 +380,7 @@
               <div id="bellLog" class="bell-log hidden"></div>
               <div id="gamePlayers" class="game-players player-layer"></div>
               <button id="bellButton" class="bell-button bell-zone" type="button" title="스페이스바로 종 치기">
-                <img id="bellImage" src="/assets/bell/bell.png" alt="" aria-hidden="true" />
+                <img id="bellImage" src="/assets/bell/bell.webp" alt="" aria-hidden="true" />
                 <span class="bell-fallback">종</span>
               </button>
               <div id="mobileTouchHint" class="mobile-touch-hint hidden" aria-live="polite"></div>
@@ -566,22 +557,9 @@
       </form>
     </div>
 
-    <div id="nicknameChangeModal" class="modal-backdrop hidden">
-      <form id="nicknameChangeForm" class="modal-card">
-        <h2>닉네임 변경</h2>
-        <p id="nicknameChangeError" class="error-text"></p>
-        <input id="nicknameChangeInput" type="text" maxlength="6" autocomplete="off" />
-        <small>하루 1회 변경 가능합니다.</small>
-        <div class="modal-actions">
-          <button class="secondary-button" id="cancelNicknameChangeButton" type="button">취소</button>
-          <button class="primary-button" type="submit">변경</button>
-        </div>
-      </form>
-    </div>
-
     <div id="toast" class="toast hidden"></div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/js/client.js"></script>
+    <script src="/js/client.js?v=asset-opt-20260622"></script>
   </body>
 </html>
