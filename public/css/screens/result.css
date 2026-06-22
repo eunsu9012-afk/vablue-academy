@@ -314,9 +314,10 @@ body.is-result-overlay-open #gameInfoToggleButton {
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 850;
+  line-height: 1.45;
   text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .result-rank-section {

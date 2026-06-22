@@ -82,6 +82,21 @@ const AI_DIFFICULTY_LABELS = {
   advanced: "고급",
   tutorial: "튜토리얼",
 };
+const AI_READY_BLOCK_MESSAGE = "준비를 누른 플레이어가 있어 AI를 추가할 수 없습니다.\n준비를 취소하면 AI를 다시 추가할 수 있습니다.";
+const AI_HELP_MESSAGE = "준비를 취소하면 AI를 추가할 수 있습니다.";
+const READY_HELP_MESSAGE = "준비 버튼을 누르면 AI 추가가 제한됩니다.";
+const AI_STATS_EXCLUDED_MESSAGE = "AI가 포함된 게임은 공식 전적에 반영되지 않습니다.";
+const START_READY_MESSAGE = "방장을 제외한 모든 플레이어가 준비해야 시작할 수 있습니다.";
+const START_MINIMUM_MESSAGE = "총 2명 이상이어야 게임을 시작할 수 있습니다.";
+const START_ASSETS_MESSAGE = "게임 자료를 확인하는 중입니다.";
+const START_SYNC_MESSAGE = "게임 시작을 준비하는 중입니다.";
+const START_AVAILABLE_MESSAGE = "게임 시작 가능";
+const FLIP_WAITING_MESSAGE = "게임 시작 준비 중입니다. 잠시 후 조작할 수 있습니다.";
+const FLIP_NOT_TURN_MESSAGE = "내 차례일 때만 카드를 오픈할 수 있습니다.";
+const FLIP_ALREADY_OPENED_MESSAGE = "이미 이번 턴의 카드를 오픈했습니다.";
+const FLIP_NOT_STARTED_MESSAGE = "게임이 시작되면 카드를 오픈할 수 있습니다.";
+const FLIP_NOT_OWN_CARD_MESSAGE = "내 카드만 오픈할 수 있습니다.";
+const WAITING_DELAY_MESSAGE = "다른 플레이어의 연결이 지연되고 있습니다.";
 const STATUS_ICONS = {
   lobby: "🔵",
   waiting: "🟢",
@@ -145,6 +160,7 @@ let preGameCountdownTimer = null;
 let preGameCountdownPromise = null;
 let preGameCountdownToken = 0;
 let preGameCountdownCompletedAt = 0;
+let gameStartWaitingNoticeTimer = null;
 let pendingPreGameState = null;
 let startGameRequestPending = false;
 let latencyNonce = 0;
@@ -343,12 +359,14 @@ function showScreen(name) {
   updateMobileMode();
 }
 
-function showToast(message) {
+function showToast(message, type = "info", durationMs = 2200) {
   const toast = $("#toast");
+  if (!toast || !message) return;
   toast.textContent = message;
+  toast.dataset.type = type;
   toast.classList.remove("hidden");
   clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => toast.classList.add("hidden"), 2200);
+  showToast.timer = setTimeout(() => toast.classList.add("hidden"), durationMs);
 }
 
 function hasFinalConsonant(text) {
@@ -422,9 +440,38 @@ function isFlipAvailable(game = state.game) {
   return Date.now() >= Number(game.nextFlipAllowedAt || 0);
 }
 
-async function requestFlipCard() {
+function getFlipUnavailableReason(game = state.game, { ownDeck = true } = {}) {
+  if (!game || game.status !== "playing") return FLIP_NOT_STARTED_MESSAGE;
+  if (!ownDeck) return FLIP_NOT_OWN_CARD_MESSAGE;
+  if (!state.gameInteractive && !game.isTutorial) return FLIP_WAITING_MESSAGE;
+  if (!state.assetsReady) return START_ASSETS_MESSAGE;
+  const self = getSelfPlayer(game);
+  if (!self || self.spectator || self.eliminated) return "현재는 카드를 오픈할 수 없습니다.";
+  if (game.bellLocked) return "종 판정 중입니다. 잠시 후 조작할 수 있습니다.";
+  if (self.id !== game.currentTurnPlayerId) return FLIP_NOT_TURN_MESSAGE;
+  if (Date.now() < Number(game.nextFlipAllowedAt || 0)) return FLIP_ALREADY_OPENED_MESSAGE;
+  return "";
+}
+
+function showFlipUnavailableReason(options = {}) {
+  const reason = getFlipUnavailableReason(state.game, options);
+  if (reason) showToast(reason, "warning", 3000);
+}
+
+async function requestFlipCard({ showReason = false, ownDeck = true } = {}) {
+  if (!ownDeck) {
+    if (showReason) showFlipUnavailableReason({ ownDeck });
+    return;
+  }
+  if (!isFlipAvailable()) {
+    if (showReason) showFlipUnavailableReason({ ownDeck });
+    return;
+  }
   await ensureAssetsReady();
-  if (!isFlipAvailable()) return;
+  if (!isFlipAvailable()) {
+    if (showReason) showFlipUnavailableReason({ ownDeck });
+    return;
+  }
   socket.emit("flipCard");
 }
 
@@ -527,8 +574,7 @@ function ensureMobileGameInfoMarkup() {
   });
   $("#mobileFlipButton")?.addEventListener("click", async (event) => {
     event.stopPropagation();
-    if (!isFlipAvailable()) return;
-    await requestFlipCard();
+    await requestFlipCard({ showReason: true });
     updateMobileActionButtons();
   });
 }
@@ -537,7 +583,13 @@ function updateMobileActionButtons(game = state.game) {
   const bellButton = $("#mobileBellButton");
   const flipButton = $("#mobileFlipButton");
   if (bellButton) bellButton.disabled = !(state.activeScreen === "game" && isSelfAbleToAct(game));
-  if (flipButton) flipButton.disabled = !isFlipAvailable(game);
+  if (flipButton) {
+    const inGame = state.activeScreen === "game";
+    const available = inGame && isFlipAvailable(game);
+    flipButton.disabled = !inGame;
+    flipButton.setAttribute("aria-disabled", String(!available));
+    flipButton.title = available ? "카드 오픈" : getFlipUnavailableReason(game);
+  }
 }
 
 function updateMobileGameInfoPanel() {
@@ -794,6 +846,43 @@ function aiDifficultyLabel(value) {
 
 function roomAIInfoLabel(room) {
   return room?.aiMode === "playersOnly" ? "플레이어만" : `AI: ${aiDifficultyLabel(room?.aiDifficulty)}`;
+}
+
+function roomNonHostHumans(room = state.room) {
+  if (!room?.players) return [];
+  return room.players.filter((player) => !player.isAI && !player.spectator && player.id !== room.hostId);
+}
+
+function allRoomNonHostHumansReady(room = state.room) {
+  const humans = roomNonHostHumans(room);
+  return humans.length > 0 && humans.every((player) => player.ready);
+}
+
+function getAIAddBlockReason(room = state.room) {
+  if (!room) return "";
+  const visiblePlayers = roomVisiblePlayers(room);
+  if (room.aiMode === "playersOnly") return "플레이어만 방에서는 AI를 추가할 수 없습니다.";
+  if (room.status !== "waiting" || room.countdown || room.starting) return "게임 시작 중에는 AI를 변경할 수 없습니다.";
+  if (visiblePlayers.length >= Number(room.maxPlayers || 0)) return "방 인원이 가득 차 AI를 추가할 수 없습니다.";
+  if (allRoomNonHostHumansReady(room)) return AI_READY_BLOCK_MESSAGE;
+  return "";
+}
+
+function normalizeStartReason(reason = "") {
+  if (!reason) return "";
+  if (reason.includes("최소 2명")) return START_MINIMUM_MESSAGE;
+  if (reason.includes("준비")) return START_READY_MESSAGE;
+  if (reason.includes("자료") || reason.includes("assets")) return START_ASSETS_MESSAGE;
+  if (reason.includes("카운트다운") || reason.includes("준비 중")) return START_SYNC_MESSAGE;
+  return reason;
+}
+
+function getRoomStartStatusText(room, isCountdown = false) {
+  if (isCountdown) return START_SYNC_MESSAGE;
+  if (!state.assetsReady) return START_ASSETS_MESSAGE;
+  const reason = normalizeStartReason(room?.canStartReason || "");
+  if (reason) return reason;
+  return room?.canStart ? START_AVAILABLE_MESSAGE : START_MINIMUM_MESSAGE;
 }
 
 function roomStatusLabel(status) {
@@ -1069,10 +1158,11 @@ function ensurePreGameCountdownOverlay() {
     <div id="preGameWaitingCard" class="pre-game-waiting-card hidden" role="status">
       <strong>잠시만 기다려주십시오</strong>
       <span>다른 플레이어의 화면을 준비하고 있습니다.</span>
+      <span id="preGameWaitingStatus" class="pre-game-waiting-status hidden"></span>
     </div>
   `;
   if (overlay) {
-    if (!$("#preGameCountdownNumber") || !$("#preGameWaitingCard")) overlay.innerHTML = markup;
+    if (!$("#preGameCountdownNumber") || !$("#preGameWaitingCard") || !$("#preGameWaitingStatus")) overlay.innerHTML = markup;
     return overlay;
   }
   overlay = document.createElement("div");
@@ -1088,6 +1178,13 @@ function ensurePreGameCountdownOverlay() {
 function hidePreGameCountdownOverlay() {
   const overlay = $("#preGameCountdownOverlay");
   if (!overlay) return;
+  if (gameStartWaitingNoticeTimer) clearTimeout(gameStartWaitingNoticeTimer);
+  gameStartWaitingNoticeTimer = null;
+  const waitingStatus = $("#preGameWaitingStatus");
+  if (waitingStatus) {
+    waitingStatus.textContent = "";
+    waitingStatus.classList.add("hidden");
+  }
   overlay.classList.add("hidden");
   overlay.classList.remove("is-pulse");
   overlay.classList.remove("is-waiting");
@@ -1114,9 +1211,19 @@ function showGameStartWaitingOverlay() {
   const overlay = ensurePreGameCountdownOverlay();
   const numberElement = $("#preGameCountdownNumber");
   const waitingCard = $("#preGameWaitingCard");
+  const waitingStatus = $("#preGameWaitingStatus");
   clearStartCountdownTimer();
+  if (gameStartWaitingNoticeTimer) clearTimeout(gameStartWaitingNoticeTimer);
   if (numberElement) numberElement.classList.add("hidden");
   if (waitingCard) waitingCard.classList.remove("hidden");
+  if (waitingStatus) {
+    waitingStatus.textContent = "";
+    waitingStatus.classList.add("hidden");
+    gameStartWaitingNoticeTimer = setTimeout(() => {
+      waitingStatus.textContent = WAITING_DELAY_MESSAGE;
+      waitingStatus.classList.remove("hidden");
+    }, 5000);
+  }
   overlay.classList.remove("hidden");
   overlay.classList.remove("is-pulse");
   overlay.classList.add("is-waiting");
@@ -1401,11 +1508,11 @@ function getLobbyRoomStatus(room) {
   return "playing";
 }
 
-function getLobbyRoomStatusLabel(room) {
+function getLobbyRoomStatusLabel(room, { compact = false } = {}) {
   const status = getLobbyRoomStatus(room);
-  if (status === "countdown") return "시작 중";
-  if (status === "full") return "풀방";
-  if (status === "waiting") return "대기중";
+  if (status === "countdown") return compact ? "시작중" : "시작 중";
+  if (status === "full") return compact ? "풀방" : "가득참";
+  if (status === "waiting") return compact ? "대기" : "대기중";
   return "게임중";
 }
 
@@ -1426,7 +1533,7 @@ function matchesLobbyRoomFilters(room, filters) {
 
 function renderLobbyRoomCard(room, displayIndex) {
   const status = getLobbyRoomStatus(room);
-  const statusLabel = getLobbyRoomStatusLabel(room);
+  const statusLabel = getLobbyRoomStatusLabel(room, { compact: isMobileMode() });
   const canJoin = status === "waiting";
   const card = document.createElement("button");
   card.type = "button";
@@ -2160,12 +2267,23 @@ function renderRoom(room) {
   $("#addAIButton").classList.toggle("hidden", !isHost || isPlayersOnly);
   $("#removeAIButton").classList.toggle("hidden", !isHost || isPlayersOnly);
   $("#startGameButton").classList.toggle("hidden", !isHost);
-  $("#addAIButton").disabled = !isHost || isPlayersOnly || room.status !== "waiting" || isCountdown || visiblePlayers.length >= room.maxPlayers || allNonHostHumansReady;
+  const addAIBlockReason = getAIAddBlockReason(room);
+  const addAIUnavailable = Boolean(addAIBlockReason);
+  $("#addAIButton").disabled = !isHost || isPlayersOnly;
+  $("#addAIButton").setAttribute("aria-disabled", String(addAIUnavailable));
+  $("#addAIButton").title = addAIUnavailable ? addAIBlockReason.replace(/\n/g, " ") : "AI 추가";
   $("#removeAIButton").disabled = !isHost || isPlayersOnly || isCountdown || !room.players.some((player) => player.isAI);
   $("#startGameButton").disabled = !isHost || !room.canStart || !state.assetsReady || isCountdown;
-  $("#roomHint").textContent = isCountdown
-    ? "게임 시작 중입니다."
-    : (room.canStartReason || (state.assetsReady ? "게임 시작 조건: 총 2명 이상" : "게임 자료 확인 후 시작할 수 있습니다"));
+  $("#roomHint").textContent = getRoomStartStatusText(room, isCountdown);
+  setText("#roomAIHelp", allNonHostHumansReady ? AI_READY_BLOCK_MESSAGE : AI_HELP_MESSAGE);
+  $("#roomAIHelp")?.classList.toggle("is-warning", allNonHostHumansReady);
+  setText("#readyHelp", READY_HELP_MESSAGE);
+  const hasAI = visiblePlayers.some((player) => player.isAI);
+  const aiStatsNotice = $("#roomAIStatsNotice");
+  if (aiStatsNotice) {
+    aiStatsNotice.textContent = AI_STATS_EXCLUDED_MESSAGE;
+    aiStatsNotice.classList.toggle("hidden", !hasAI);
+  }
 }
 
 function getSeatPosition(index, count) {
@@ -2321,7 +2439,7 @@ function applyCardHighlight(cardElement, highlight = []) {
   }
 }
 
-function syncDeckCard(deckSlot, canFlip, visible) {
+function syncDeckCard(deckSlot, canFlip, visible, ownDeck = false) {
   if (!visible) {
     deckSlot.replaceChildren();
     return;
@@ -2333,8 +2451,10 @@ function syncDeckCard(deckSlot, canFlip, visible) {
     deckSlot.replaceChildren(deck);
   }
   deck.classList.toggle("clickable", canFlip);
-  deck.disabled = !canFlip;
-  deck.onclick = canFlip ? () => requestFlipCard() : null;
+  deck.disabled = false;
+  deck.setAttribute("aria-disabled", String(!canFlip));
+  deck.title = canFlip ? "카드 오픈" : getFlipUnavailableReason(state.game, { ownDeck });
+  deck.onclick = () => requestFlipCard({ showReason: true, ownDeck });
 }
 
 function syncPileCard(pileSlot, card, highlight) {
@@ -2426,7 +2546,7 @@ function renderGame(game) {
     zone.querySelector(".score").textContent = player.score;
 
     const deckSlot = zone.querySelector(".deck-slot");
-    syncDeckCard(deckSlot, canFlip, !player.spectator);
+    syncDeckCard(deckSlot, canFlip, !player.spectator, isSelf);
 
     const pileSlot = zone.querySelector(".pile-slot");
     syncPileCard(pileSlot, player.topCard, highlight);
@@ -2631,6 +2751,13 @@ async function handleMobileGameBoardTouch(event) {
     mobileTouchLastAt = now;
     event.preventDefault();
     await requestFlipCard();
+    return;
+  }
+  const flipReason = getFlipUnavailableReason();
+  if (flipReason) {
+    mobileTouchLastAt = now;
+    event.preventDefault();
+    showToast(flipReason, "warning", 3000);
   }
 }
 
@@ -3009,7 +3136,7 @@ function renderGameResult(result) {
           <strong>${result.statsExcluded ? "제외" : "반영"}</strong>
         </div>
       </section>
-      ${result.statsExcluded ? `<p class="result-notice">AI 포함 게임은 전적에 반영되지 않습니다.</p>` : ""}
+      ${result.statsExcluded ? `<p class="result-notice">${AI_STATS_EXCLUDED_MESSAGE}</p>` : ""}
       <section class="result-rank-section" aria-label="최종 순위">
         <div class="result-rank-header">
           <h3>최종 순위</h3>
@@ -3231,7 +3358,11 @@ $("#nicknameChangeForm").addEventListener("submit", (event) => {
 
 $("#readyButton").addEventListener("click", () => socket.emit("toggleReady"));
 $("#addAIButton").addEventListener("click", () => {
-  if ($("#addAIButton").disabled) return;
+  const reason = getAIAddBlockReason();
+  if (reason) {
+    showToast(reason, "warning", 3200);
+    return;
+  }
   socket.emit("addAI");
 });
 $("#removeAIButton").addEventListener("click", () => socket.emit("removeAI"));
@@ -3419,8 +3550,11 @@ socket.on("roomPasswordError", (payload) => {
 
 socket.on("errorMessage", (message) => {
   startGameRequestPending = false;
-  showToast(message);
-  if (!$("#createRoomModal").classList.contains("hidden")) $("#createError").textContent = message;
+  const displayMessage = String(message || "").includes("AI") && String(message || "").includes("준비")
+    ? AI_READY_BLOCK_MESSAGE
+    : message;
+  showToast(displayMessage, "warning", 3200);
+  if (!$("#createRoomModal").classList.contains("hidden")) $("#createError").textContent = displayMessage;
 });
 
 socket.on("bellResult", (payload) => {

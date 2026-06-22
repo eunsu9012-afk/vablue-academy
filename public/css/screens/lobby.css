@@ -467,8 +467,8 @@
 .room-status-pill,
 .user-status-pill {
   display: inline-grid;
-  min-width: 0;
-  max-width: 86px;
+  min-width: 58px;
+  max-width: 96px;
   min-height: 28px;
   place-items: center;
   overflow: hidden;
@@ -485,6 +485,7 @@
   color: var(--bb-green);
 }
 
+.online-user.status-lobby .status-dot,
 .user-status-pill.status-lobby {
   background: var(--bb-blue-100);
   color: var(--bb-blue-700);
@@ -996,6 +997,11 @@
   .room-status-pill {
     grid-area: status;
     justify-self: end;
+    min-width: 58px;
+    max-width: 68px;
+    padding-inline: 8px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .room-enter-label {

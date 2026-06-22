@@ -441,6 +441,33 @@
   min-height: 46px;
 }
 
+.room-helper-text {
+  margin: 0;
+  min-width: 0;
+  color: var(--bb-text-sub);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.room-helper-text.is-warning,
+.room-ai-stats-notice {
+  border: 1px solid rgba(246, 183, 53, 0.34);
+  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.84);
+  color: var(--bb-blue-950);
+  padding: 8px 9px;
+}
+
+.room-helper-text.hidden {
+  display: none;
+}
+
+.room-ready-help {
+  margin-top: -2px;
+}
+
 .room-actions-card #startGameButton {
   min-height: 54px;
   font-size: 16px;
@@ -454,11 +481,16 @@
 
 .room-start-hint {
   display: block;
-  margin: 2px 0 0;
-  color: var(--bb-text-sub);
+  margin: -1px 0 2px;
+  border: 1px solid rgba(111, 159, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(241, 247, 255, 0.78);
+  color: var(--bb-blue-800);
+  padding: 8px 9px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .room-guide-card {

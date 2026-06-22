@@ -345,6 +345,8 @@
                     <button id="addAIButton" class="secondary-button" type="button">AI 추가</button>
                     <button id="removeAIButton" class="secondary-button" type="button">AI 제거</button>
                   </div>
+                  <p id="roomAIHelp" class="room-helper-text">준비를 취소하면 AI를 추가할 수 있습니다.</p>
+                  <p id="roomAIStatsNotice" class="room-helper-text room-ai-stats-notice hidden">AI가 포함된 게임은 공식 전적에 반영되지 않습니다.</p>
                 </section>
 
                 <section class="room-actions-card bb-card room-actions">
@@ -355,9 +357,10 @@
                     </div>
                   </div>
                   <button id="readyButton" class="primary-button" type="button">준비</button>
+                  <p id="readyHelp" class="room-helper-text room-ready-help">준비 버튼을 누르면 AI 추가가 제한됩니다.</p>
                   <button id="startGameButton" class="primary-button" type="button">게임 시작</button>
-                  <button id="roomLeaveButton" class="ghost-button" type="button">나가기</button>
                   <p id="roomHint" class="hint-text room-start-hint"></p>
+                  <button id="roomLeaveButton" class="ghost-button" type="button">나가기</button>
                 </section>
 
                 <details class="room-guide-card bb-card room-mobile-collapsible-settings" open>
@@ -430,6 +433,7 @@
       <div id="preGameWaitingCard" class="pre-game-waiting-card hidden" role="status">
         <strong>잠시만 기다려주십시오</strong>
         <span>다른 플레이어의 화면을 준비하고 있습니다.</span>
+        <span id="preGameWaitingStatus" class="pre-game-waiting-status hidden"></span>
       </div>
     </div>
 

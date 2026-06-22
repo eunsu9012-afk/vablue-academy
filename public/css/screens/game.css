@@ -660,6 +660,11 @@ body.is-game-screen #gameScreen .deck-card {
   cursor: default;
 }
 
+body.is-game-screen #gameScreen .deck-card[aria-disabled="true"] {
+  opacity: 0.62;
+  cursor: help;
+}
+
 body.is-game-screen #gameScreen .deck-card img {
   display: block;
   width: 100%;
@@ -899,6 +904,15 @@ body.is-game-screen #bellButton .bell-fallback {
   font-size: 14px;
   font-weight: 800;
   line-height: 1.5;
+}
+
+.pre-game-waiting-status {
+  border-radius: 999px;
+  background: rgba(246, 183, 53, 0.18);
+  color: var(--bb-blue-950) !important;
+  padding: 7px 10px;
+  font-size: 12px !important;
+  font-weight: 900 !important;
 }
 
 .pre-game-countdown-overlay.is-waiting {
@@ -1381,7 +1395,8 @@ body.is-game-screen #mobileBoardStats {
     color: var(--bb-blue-900);
   }
 
-  body.is-game-screen #mobileBoardStats .mobile-action-button:disabled {
+  body.is-game-screen #mobileBoardStats .mobile-action-button:disabled,
+  body.is-game-screen #mobileBoardStats .mobile-action-button[aria-disabled="true"] {
     cursor: default;
     opacity: 0.48;
   }
