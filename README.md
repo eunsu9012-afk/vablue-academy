@@ -127,3 +127,12 @@ D:\Downloads\작품활동\음악\할리갈리 track3.mp3 -> public/assets/sounds
 ```
 
 우측 상단 설정 메뉴의 `BGM 모드`에서 `전부`, `경쾌`, `잔잔`을 선택할 수 있습니다. 선택값은 `localStorage`의 `bgmMode`에 `all`, `energetic`, `calm` 값으로 저장됩니다.
+
+## PC 조작법 이미지 에셋
+
+PC 인게임 상단 메뉴 왼쪽에 표시되는 조작법 이미지는 아래 경로로 복사해서 사용합니다.
+
+```text
+D:\Downloads\작품활동\이미지\'조작법1'.png -> public/assets/tutorial/controls1.png
+D:\Downloads\작품활동\이미지\'조작법2'.png -> public/assets/tutorial/controls2.png
+```

@@ -33,6 +33,34 @@ body.is-game-screen #gameHud.hidden {
   display: none;
 }
 
+.pc-control-guides {
+  display: none;
+}
+
+body.is-game-screen .pc-control-guides:not([hidden]) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  --menu-button-height: var(--bb-touch-min);
+}
+
+.pc-control-guides[hidden],
+.pc-control-guide-img[hidden] {
+  display: none !important;
+}
+
+.pc-control-guide-img {
+  display: block;
+  width: auto;
+  height: var(--menu-button-height, 48px);
+  max-width: min(14vw, 164px);
+  max-height: 48px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
 .mobile-control-hand-toggle {
   display: none;
 }
@@ -1302,10 +1330,10 @@ body.is-game-screen #mobileBoardStats {
 
   body.is-game-screen .topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      "brand hand menu"
-      "hud hud hud";
+      "brand guides hand menu"
+      "hud hud hud hud";
     gap: 8px;
     min-height: var(--bb-mobile-header-h);
     padding: calc(var(--bb-safe-top) + 7px) 10px 8px;
@@ -1328,6 +1356,11 @@ body.is-game-screen #mobileBoardStats {
     grid-area: menu;
     min-width: 44px;
     min-height: 44px;
+  }
+
+  body.is-game-screen .pc-control-guides:not([hidden]) {
+    grid-area: guides;
+    justify-self: end;
   }
 
   body.is-game-screen #mobileControlHandToggle {
@@ -1481,6 +1514,12 @@ body.is-game-screen #mobileBoardStats {
   body.is-game-screen #mobileBoardStats .mobile-game-info-toggle,
   body.is-game-screen #mobileBoardStats .mobile-game-info-details {
     display: none;
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .pc-control-guides {
+    display: none !important;
   }
 }
 

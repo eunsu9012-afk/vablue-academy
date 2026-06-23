@@ -1,4 +1,4 @@
-const APP_VERSION = "turn-sync-fix-20260623-1";
+const APP_VERSION = "controls-guide-20260624-3";
 const DEBUG_TIMING = new URLSearchParams(window.location.search).has("debugTiming");
 
 console.info("[Babyblue Halligalli] client version:", APP_VERSION);
@@ -750,6 +750,36 @@ function updateMobileMode() {
   updateMobileGameInfoPanel();
   updateMobileControlHandUI();
   updateMobileTouchHint();
+}
+
+function updatePcControlGuidesVisibility() {
+  const guide = $("#pcControlGuides");
+  if (!guide) return;
+  const images = [...guide.querySelectorAll(".pc-control-guide-img")];
+  guide.hidden = images.length > 0 && images.every((image) => image.hidden || image.dataset.imageMissing === "true");
+}
+
+function setupPcControlGuides() {
+  const guide = $("#pcControlGuides");
+  if (!guide) return;
+  const images = [...guide.querySelectorAll(".pc-control-guide-img")];
+  if (!images.length) {
+    guide.hidden = true;
+    return;
+  }
+  const hideMissingImage = (image) => {
+    if (image.dataset.imageMissing === "true") return;
+    image.dataset.imageMissing = "true";
+    image.hidden = true;
+    console.warn("[Babyblue Halligalli] PC control guide image missing:", image.currentSrc || image.src);
+    updatePcControlGuidesVisibility();
+  };
+  images.forEach((image) => {
+    image.addEventListener("error", () => hideMissingImage(image), { once: true });
+    image.addEventListener("load", updatePcControlGuidesVisibility, { once: true });
+    if (image.complete && image.naturalWidth === 0) hideMissingImage(image);
+  });
+  updatePcControlGuidesVisibility();
 }
 
 function setupMobileLobbySection(panel, label, expandedByDefault = true) {
@@ -3689,6 +3719,7 @@ document.querySelectorAll(".emote-button").forEach((button) => {
   button.addEventListener("click", () => requestEmote(button.dataset.emoteId || ""));
   button.querySelector("img")?.addEventListener("error", () => button.classList.add("image-missing"), { once: true });
 });
+setupPcControlGuides();
 document.querySelectorAll("#mobileControlHandToggle [data-control-hand]").forEach((button) => {
   button.addEventListener("click", () => setMobileControlHand(button.dataset.controlHand || "right"));
 });

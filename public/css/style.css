@@ -15,5 +15,5 @@
 @import url("./screens/lobby.css") layer(screens);
 @import url("./screens/tutorial.css") layer(screens);
 @import url("./screens/room.css") layer(screens);
-@import url("./screens/game.css") layer(screens);
+@import url("./screens/game.css?v=controls-guide-20260624-3") layer(screens);
 @import url("./screens/result.css") layer(screens);
