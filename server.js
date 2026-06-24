@@ -68,6 +68,7 @@ const START_COUNTDOWN_MS = 3000;
 const GAME_START_READY_TIMEOUT_MS = 10000;
 const AI_FLIP_EXTRA_DELAY_MIN_MS = 100;
 const AI_FLIP_EXTRA_DELAY_MAX_MS = 400;
+const RECONNECT_GRACE_MS = 10000;
 const BASE_PENALTY = 5;
 const PRIVATE_DECK_SIZE = 5;
 const CARD_TOTAL_WEIGHTS = [
@@ -845,10 +846,7 @@ function attachSocketToUser(socket, user) {
   user.avatarId = normalizeFanCharacterId(user.avatarId || socket.data.avatarId);
   socket.data.nickname = user.nickname;
   socket.data.avatarId = user.avatarId;
-  if (user.reconnectTimer) {
-    clearTimeout(user.reconnectTimer);
-    user.reconnectTimer = null;
-  }
+  clearReconnectTimer(user);
 }
 
 function syncPlayerIdentity(player, user) {
@@ -937,6 +935,12 @@ function cleanupDisconnectedUser(nickname) {
   }
 }
 
+function clearReconnectTimer(user) {
+  if (!user?.reconnectTimer) return;
+  clearTimeout(user.reconnectTimer);
+  user.reconnectTimer = null;
+}
+
 function transferHostIfNeeded(room) {
   const currentHost = findPlayer(room, room.hostId);
   if (currentHost && !currentHost.isAI && !currentHost.spectator) return;
@@ -951,6 +955,7 @@ function deleteRoom(roomId, reason = "") {
   for (const player of getHumanPlayers(room)) {
     const user = usersByNickname.get(player.nickname);
     if (user?.roomId === roomId) {
+      clearReconnectTimer(user);
       user.roomId = null;
       user.playerId = null;
     }
@@ -1076,6 +1081,7 @@ function removeHumanFromRoom(room, player, reason = "leave") {
   const countdownWasActive = Boolean(room.startCountdown);
   const user = usersByNickname.get(player.nickname);
   if (user) {
+    clearReconnectTimer(user);
     user.roomId = null;
     user.playerId = null;
   }
@@ -1106,6 +1112,7 @@ function detachGamePlayerToLobby(socket, room, player, reason = "leave game", em
   const user = usersByNickname.get(player.nickname);
   const liveSocket = socket || getSocketById(player.socketId);
   if (user) {
+    clearReconnectTimer(user);
     user.roomId = null;
     user.playerId = null;
   }
@@ -1145,12 +1152,62 @@ async function recordLeaveLoss(room, player) {
   logEvent("Leave loss recorded", `${player.nickname} / ${room.title}`);
 }
 
+function clearLiveGameFlowTimers(room) {
+  if (!room?.game) return;
+  clearAITimers(room);
+  if (room.game.turnTimer) clearTimeout(room.game.turnTimer);
+  if (room.game.revealTimer) clearTimeout(room.game.revealTimer);
+  if (room.game.roundTimer) clearTimeout(room.game.roundTimer);
+  room.game.turnTimer = null;
+  room.game.revealTimer = null;
+  room.game.roundTimer = null;
+}
+
+function resetLiveGameFlowAfterLeave(room) {
+  if (!room?.game) return;
+  room.game.tableVersion += 1;
+  room.game.bellLocked = false;
+  room.game.currentTurnPlayerId = null;
+  room.game.turnStartedAt = 0;
+  room.game.turnEndsAt = 0;
+  room.game.nextFlipAllowedAt = 0;
+  room.game.matchedCharacters = [];
+  room.game.wrongFlash = false;
+  room.game.aiBellScheduledForVersion = -1;
+  room.game.correctConditionStartedAt = null;
+  room.game.correctConditionVersion = -1;
+  room.game.collectingCorrectReactions = false;
+  room.game.reactionPlayerIds = new Set();
+  room.game.recentReactionSpeeds = [];
+}
+
+function getSafeNextTurnPlayerAfterLeave(room, removedPlayerIndex = 0) {
+  const activePlayers = getActivePlayers(room);
+  if (activePlayers.length === 0) return null;
+  if (room.players.length === 0) return activePlayers[0];
+
+  const startIndex = Math.max(0, Number.isFinite(removedPlayerIndex) ? removedPlayerIndex : 0);
+  for (let offset = 0; offset < room.players.length; offset += 1) {
+    const candidate = room.players[(startIndex + offset) % room.players.length];
+    if (candidate && !candidate.spectator && !candidate.eliminated) return candidate;
+  }
+
+  return activePlayers[0];
+}
+
 async function removeActiveHumanFromGame(socket, room, player, reason = "leave game") {
-  const wasCurrentTurn = room.game?.currentTurnPlayerId === player.id;
-  const nextPlayerId = wasCurrentTurn ? nextAlivePlayerId(room, player.id) : room.game?.currentTurnPlayerId;
+  if (!room || !player || room.status !== "playing" || !room.game) return;
+
+  clearLiveGameFlowTimers(room);
+
+  const leftPlayerId = player.id;
+  const leftPlayerIndex = room.players.findIndex((entry) => entry.id === leftPlayerId);
+  const previousCurrentTurnPlayerId = room.game.currentTurnPlayerId;
   await recordLeaveLoss(room, player);
   detachGamePlayerToLobby(socket, room, player, reason, false);
-  room.players = room.players.filter((entry) => entry.id !== player.id);
+  room.players = room.players.filter((entry) => entry.id !== leftPlayerId);
+
+  resetLiveGameFlowAfterLeave(room);
 
   if (getHumanPlayers(room).length === 0) {
     finishAIOnlyRoom(room, "AI only");
@@ -1163,16 +1220,27 @@ async function removeActiveHumanFromGame(socket, room, player, reason = "leave g
     return;
   }
 
-  transferHostIfNeeded(room);
-  if (wasCurrentTurn && room.status === "playing" && room.game) {
-    setCurrentTurn(room, nextPlayerId || activePlayers[0].id);
+  if (activePlayers.length === 1) {
+    await finishGame(room, activePlayers[0]);
+    return;
   }
 
-  const winner = getWinner(room);
+  transferHostIfNeeded(room);
+  updateCorrectConditionWindow(room);
+
+  const previousCurrentTurnPlayer = previousCurrentTurnPlayerId
+    ? findPlayer(room, previousCurrentTurnPlayerId)
+    : null;
+  const nextTurnPlayer = previousCurrentTurnPlayer
+    && !previousCurrentTurnPlayer.spectator
+    && !previousCurrentTurnPlayer.eliminated
+    ? previousCurrentTurnPlayer
+    : getSafeNextTurnPlayerAfterLeave(room, leftPlayerIndex);
+
+  setCurrentTurn(room, nextTurnPlayer?.id || activePlayers[0].id);
   emitGameState(room);
   emitLobbyState();
-  if (winner) await finishGame(room, winner);
-  else scheduleAI(room);
+  scheduleAI(room);
 }
 
 function clearRoomTimers(room) {
@@ -2273,6 +2341,44 @@ function handleReconnect(socket, nickname, user) {
   return false;
 }
 
+function scheduleDisconnectRemoval(nickname) {
+  const user = usersByNickname.get(nickname);
+  if (!user) return;
+  clearReconnectTimer(user);
+
+  user.reconnectTimer = setTimeout(async () => {
+    const liveUser = usersByNickname.get(nickname);
+    if (!liveUser) return;
+    liveUser.reconnectTimer = null;
+
+    if (liveUser.connected) return;
+    if (!liveUser.roomId) {
+      cleanupDisconnectedUser(nickname);
+      emitLobbyState();
+      return;
+    }
+
+    const room = rooms.get(liveUser.roomId);
+    const player = room ? findPlayer(room, liveUser.playerId) : null;
+    if (!room || !player) {
+      liveUser.roomId = null;
+      liveUser.playerId = null;
+      cleanupDisconnectedUser(nickname);
+      emitLobbyState();
+      return;
+    }
+
+    if (room.status === "playing" && !player.spectator) {
+      await removeActiveHumanFromGame(null, room, player, "disconnect timeout");
+    } else {
+      removeHumanFromRoom(room, player, player.spectator ? "spectator disconnect timeout" : "disconnect timeout");
+    }
+    cleanupDisconnectedUser(nickname);
+  }, RECONNECT_GRACE_MS);
+
+  if (typeof user.reconnectTimer.unref === "function") user.reconnectTimer.unref();
+}
+
 async function handleDisconnect(socket) {
   const nickname = socket.data.nickname;
   if (!nickname) return;
@@ -2311,8 +2417,9 @@ async function handleDisconnect(socket) {
     return;
   }
 
-  await removeActiveHumanFromGame(null, room, player, "disconnect");
-  cleanupDisconnectedUser(nickname);
+  scheduleDisconnectRemoval(nickname);
+  emitGameState(room);
+  emitLobbyState();
 }
 
 io.on("connection", (socket) => {
